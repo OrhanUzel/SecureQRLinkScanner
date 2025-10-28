@@ -1,34 +1,47 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, useColorScheme, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, useColorScheme } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
-
-// Simpler approach: rely on QR images that are already URLs or text. A real QR decode
-// from image would require a library; Expo doesn't ship one built-in. For MVP,
-// let users pick image and manually enter/confirm the decoded text.
 
 export default function ImageScanScreen() {
   const { t } = useTranslation();
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
   const [image, setImage] = useState(null);
-  const [text, setText] = useState('');
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const scanImageForCodes = async (uri) => {
+    try {
+      const { BarCodeScanner } = await import('expo-barcode-scanner');
+      const codes = await BarCodeScanner.scanFromURLAsync(uri, {
+        barCodeTypes: ['qr', 'ean13', 'ean8', 'upc_a', 'code39', 'code128']
+      });
+      if (codes && codes.length > 0 && codes[0]?.data) {
+        const data = codes[0].data;
+        setResult(classifyInput(data));
+        setError(null);
+      } else {
+        setResult(null);
+        setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
+      }
+    } catch (e) {
+      setResult(null);
+      setError('Bu Expo çalışma ortamında barkod modülü yüklü değil. Geliştirme derlemesi (expo run:android) veya APK ile çalıştırın.');
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: [ImagePicker.MediaType.IMAGE], quality: 1 });
     if (!res.canceled) {
-      setImage(res.assets[0].uri);
+      const uri = res.assets[0].uri;
+      setImage(uri);
+      await scanImageForCodes(uri);
     }
-  };
-
-  const analyzeText = () => {
-    if (!text.trim()) return;
-    setResult(classifyInput(text.trim()));
   };
 
   return (
@@ -40,22 +53,9 @@ export default function ImageScanScreen() {
       {image && (
         <Image source={{ uri: image }} style={styles.preview} />
       )}
-      <TextInput
-        style={[styles.input, { backgroundColor: dark ? '#10151c' : '#fff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
-        placeholder={t('scan.code') || 'Metin veya URL girin'}
-        placeholderTextColor={dark ? '#8b98a5' : '#7a8699'}
-        value={text}
-        onChangeText={setText}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Text style={{ color: dark ? '#8b98a5' : '#3b4654', fontSize: 12, marginTop: 6 }}>
-        Görüntü seçip buraya metin/URL yazın; sonra "Analiz".
-      </Text>
-      <TouchableOpacity style={[styles.button, { backgroundColor: '#2f9e44' }]} onPress={analyzeText}>
-        <Ionicons name="shield-checkmark" size={18} color="#fff" />
-        <Text style={styles.buttonText}>{t('actions.scan')}</Text>
-      </TouchableOpacity>
+      {error && (
+        <Text style={{ color: dark ? '#ffb3b3' : '#b00020' }}>{error}</Text>
+      )}
       {result && (
         <View style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
           <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0b1220' }]}>{result.normalized}</Text>
@@ -91,7 +91,6 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#0066cc', borderRadius: 12, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   buttonText: { color: '#fff', fontWeight: '700' },
   preview: { width: '100%', aspectRatio: 1, borderRadius: 12 },
-  input: { borderWidth: 1, borderRadius: 12, padding: 12 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
   linkText: { fontSize: 14, fontWeight: '600' },
   badge: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },

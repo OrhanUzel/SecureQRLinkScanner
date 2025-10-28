@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "secure-qr-link-scanner",
+    "name": "Secure QR Link Scanner",
     "slug": "secure-qr-link-scanner",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,13 +20,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.orhanuzel.secureqrlinkscanner"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-barcode-scanner"
     ]
   }
 }

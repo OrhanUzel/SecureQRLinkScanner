@@ -1,5 +1,5 @@
 {
-  "app.title": "Güvenli QR ve Link Tarayıcı",
+  "app.title": "Secure QR Link Scanner",
   "scan.select.title": "Tarama Türünü Seç",
   "scan.link": "Link",
   "scan.code": "QR ve Barkod",
@@ -9,9 +9,9 @@
   "result.unsafe": "Güvensiz",
   "actions.openLink": "Linki Aç",
   "actions.analyzeVirusTotal": "VirusTotal ile Analiz",
+  "actions.scan": "Analiz Et",
   "actions.copy": "Kopyala",
   "actions.share": "Paylaş",
-  "actions.scan": "Analiz Et",
   "history.title": "Geçmiş",
   "history.clear": "Geçmişi Temizle",
   "settings.title": "Ayarlar",

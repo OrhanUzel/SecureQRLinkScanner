@@ -1,5 +1,5 @@
 {
-  "app.title": "ماسح آمن للروابط و الرموز QR",
+  "app.title": "Secure QR Link Scanner",
   "scan.select.title": "اختر نوع المسح",
   "scan.link": "رابط",
   "scan.code": "رمز QR و باركود",
@@ -27,6 +27,6 @@
   "classifier.httpWarning": "رابط بدون HTTPS",
   "classifier.homoglyphWarning": "احتمال نطاق متشابه/IDN",
   "classifier.keywordWarning": "تم اكتشاف كلمة مشبوهة",
-  "classifier.tldWarning": "نطاق طويل أو امتداد منخفض الثقة",
+  "classifier.tldWarning": "TLD منخفض الثقة أو نطاق طويل",
   "disclaimer.title": "إخلاء المسؤولية"
 }

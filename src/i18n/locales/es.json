@@ -1,5 +1,5 @@
 {
-  "app.title": "Escáner Seguro de QR y Enlaces",
+  "app.title": "Secure QR Link Scanner",
   "scan.select.title": "Selecciona tipo de escaneo",
   "scan.link": "Enlace",
   "scan.code": "QR y Código de barras",

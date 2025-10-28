@@ -7,7 +7,6 @@ import i18n from './src/i18n';
 import ScanSelectScreen from './src/screens/ScanSelectScreen';
 import LinkScanScreen from './src/screens/LinkScanScreen';
 import CodeScanScreen from './src/screens/CodeScanScreen';
-import ImageScanScreen from './src/screens/ImageScanScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import DisclaimerScreen from './src/screens/DisclaimerScreen';
@@ -42,7 +41,6 @@ export default function App() {
           })} />
           <Stack.Screen name="LinkScan" component={LinkScanScreen} options={{ title: i18n.t('scan.link') }} />
           <Stack.Screen name="CodeScan" component={CodeScanScreen} options={{ title: i18n.t('scan.code') }} />
-          <Stack.Screen name="ImageScan" component={ImageScanScreen} options={{ title: i18n.t('scan.image') }} />
           <Stack.Screen name="History" component={HistoryScreen} options={{ title: i18n.t('history.title') }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: i18n.t('settings.title') }} />
           <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: i18n.t('disclaimer.title') }} />
