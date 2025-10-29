@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -7,11 +7,11 @@ import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function CodeScanScreen() {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const { dark } = useAppTheme();
   const cameraRef = useRef(null);
 
   const [permission, requestPermission] = useCameraPermissions();

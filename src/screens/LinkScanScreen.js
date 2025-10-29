@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, useColorScheme, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function LinkScanScreen() {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
-
+  const { dark } = useAppTheme();
   const [input, setInput] = useState('');
   const [result, setResult] = useState(null);
 

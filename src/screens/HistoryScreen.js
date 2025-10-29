@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function HistoryScreen() {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const { dark } = useAppTheme();
   const [items, setItems] = useState([]);
 
   const load = async () => {

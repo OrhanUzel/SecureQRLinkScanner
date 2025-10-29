@@ -1,13 +1,13 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import { getItemAsync, setItemAsync } from '../utils/secureStore';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function ConsentModal({ visible, onAccept }) {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const { dark } = useAppTheme();
 
   return (
     <Modal visible={visible} animationType="fade" transparent>

@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage } from '../i18n';
-import * as Linking from 'expo-linking';
+import { useNavigation } from '@react-navigation/native';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
-  const [theme, setTheme] = useState('system');
+  const { dark, theme, setTheme } = useAppTheme();
+  const navigation = useNavigation();
 
   useEffect(() => {
     (async () => {
@@ -31,7 +31,7 @@ export default function SettingsScreen() {
   };
 
   const openDisclaimer = () => {
-    Linking.openURL('app:///disclaimer');
+    navigation.navigate('Disclaimer');
   };
 
   return (

@@ -1,17 +1,32 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, Image, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function ScanSelectScreen({ navigation }) {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const { dark } = useAppTheme();
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
+  const [scanner, setScanner] = useState(null);
+  const [scannerReady, setScannerReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { scanFromURLAsync } = await import('expo-barcode-scanner');
+        if (mounted) { setScanner({ scanFromURLAsync }); setScannerReady(true); }
+      } catch (e) {
+        if (mounted) { setScanner(null); setScannerReady(false); }
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const pickAndScanImage = async () => {
     try {
@@ -20,12 +35,16 @@ export default function ScanSelectScreen({ navigation }) {
         Alert.alert('İzin gerekli', 'Fotoğraflara erişmek için medya kütüphanesi iznine izin verin.');
         return;
       }
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 });
       if (res.canceled) return;
       const uri = res.assets[0].uri;
       setImage(uri);
-      const { BarCodeScanner } = await import('expo-barcode-scanner');
-      const codes = await BarCodeScanner.scanFromURLAsync(uri, {
+      if (!scannerReady || !scanner || typeof scanner.scanFromURLAsync !== 'function') {
+        Alert.alert('Modül hazır değil', 'Görüntüden tarama için gerekli modül yüklenmemiş veya Expo Go ile uyumlu değil. Geliştirme derlemesi (npx expo run:android) önerilir.');
+        setResult(null);
+        return;
+      }
+      const codes = await scanner.scanFromURLAsync(uri, {
         barCodeTypes: ['qr', 'ean13', 'ean8', 'upc_a', 'code39', 'code128']
       });
       if (codes && codes.length > 0 && codes[0]?.data) {
@@ -59,6 +78,12 @@ export default function ScanSelectScreen({ navigation }) {
           <TouchableOpacity style={styles.cardInner} onPress={pickAndScanImage}>
             <Ionicons name="image" size={32} color={dark ? '#ffd479' : '#d9480f'} />
             <Text style={[styles.cardText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('scan.image')}</Text>
+          </TouchableOpacity>
+        </BlurView>
+        <BlurView intensity={30} tint={dark ? 'dark' : 'light'} style={styles.card}>
+          <TouchableOpacity style={styles.cardInner} onPress={() => navigation.navigate('Settings')}>
+            <Ionicons name="settings-outline" size={32} color={dark ? '#c1b6ff' : '#6c5ce7'} />
+            <Text style={[styles.cardText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.title')}</Text>
           </TouchableOpacity>
         </BlurView>
       </View>

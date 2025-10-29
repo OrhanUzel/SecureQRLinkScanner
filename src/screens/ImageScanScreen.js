@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function ImageScanScreen() {
   const { t } = useTranslation();
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const { dark } = useAppTheme();
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const scanImageForCodes = async (uri) => {
     try {
-      const { BarCodeScanner } = await import('expo-barcode-scanner');
-      const codes = await BarCodeScanner.scanFromURLAsync(uri, {
+      const { scanFromURLAsync } = await import('expo-barcode-scanner');
+      const codes = await scanFromURLAsync(uri, {
         barCodeTypes: ['qr', 'ean13', 'ean8', 'upc_a', 'code39', 'code128']
       });
       if (codes && codes.length > 0 && codes[0]?.data) {
