@@ -28,5 +28,11 @@
   "classifier.homoglyphWarning": "Posible dominio homógrafo/IDN",
   "classifier.keywordWarning": "Se detectó palabra clave sospechosa",
   "classifier.tldWarning": "TLD de baja confianza o dominio largo",
+  "classifier.ipHostWarning": "Host de IP (sin dominio)",
+  "classifier.shortenerWarning": "Dominio de acortador de URL detectado",
+  "classifier.portWarning": "Puerto inusual en la URL",
+  "classifier.userinfoWarning": "La URL contiene información de usuario (@)",
+  "classifier.pathEntropyWarning": "Ruta/parámetros excesivamente largos/ codificados",
+  "classifier.brandMismatchWarning": "La marca no coincide con el dominio",
   "disclaimer.title": "Aviso legal"
 }

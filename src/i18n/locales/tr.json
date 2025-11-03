@@ -28,5 +28,11 @@
   "classifier.homoglyphWarning": "Olası homograf/IDN alan adı",
   "classifier.keywordWarning": "Şüpheli anahtar kelime tespit edildi",
   "classifier.tldWarning": "Düşük güven TLD veya uzun alan adı",
+  "classifier.ipHostWarning": "IP adresli host (alan adı yok)",
+  "classifier.shortenerWarning": "URL kısaltma alan adı tespit edildi",
+  "classifier.portWarning": "Alışılmadık port kullanımı",
+  "classifier.userinfoWarning": "URL kullanıcı bilgisi içeriyor (@)",
+  "classifier.pathEntropyWarning": "Aşırı uzun/karmaşık yol veya parametreler",
+  "classifier.brandMismatchWarning": "Marka adı ile alan adı uyuşmuyor",
   "disclaimer.title": "Yasal Uyarı"
 }

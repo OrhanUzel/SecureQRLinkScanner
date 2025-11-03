@@ -28,5 +28,11 @@
   "classifier.homoglyphWarning": "احتمال نطاق متشابه/IDN",
   "classifier.keywordWarning": "تم اكتشاف كلمة مشبوهة",
   "classifier.tldWarning": "TLD منخفض الثقة أو نطاق طويل",
+  "classifier.ipHostWarning": "مضيف عنوان IP (بدون نطاق)",
+  "classifier.shortenerWarning": "تم اكتشاف نطاق لمُختصر الروابط",
+  "classifier.portWarning": "منفذ غير معتاد في الرابط",
+  "classifier.userinfoWarning": "الرابط يحتوي على معلومات مستخدم (@)",
+  "classifier.pathEntropyWarning": "مسار/معاملات طويلة أو مشفرة بشكل مفرط",
+  "classifier.brandMismatchWarning": "اسم العلامة لا يطابق النطاق",
   "disclaimer.title": "إخلاء المسؤولية"
 }

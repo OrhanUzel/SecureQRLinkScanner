@@ -27,5 +27,11 @@
   "classifier.homoglyphWarning": "Possible homoglyph/IDN domain",
   "classifier.keywordWarning": "Suspicious keyword detected",
   "classifier.tldWarning": "Low-trust TLD or long domain",
+  "classifier.ipHostWarning": "IP address host (no domain)",
+  "classifier.shortenerWarning": "URL shortener domain detected",
+  "classifier.portWarning": "Unusual port in URL",
+  "classifier.userinfoWarning": "URL contains userinfo (@)",
+  "classifier.pathEntropyWarning": "Excessively long/encoded path or parameters",
+  "classifier.brandMismatchWarning": "Brand keyword does not match domain",
   "disclaimer.title": "Disclaimer"
 }
