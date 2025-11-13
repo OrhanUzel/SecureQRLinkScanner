@@ -1,48 +1,89 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
+import BarcodeScanning from '@react-native-ml-kit/barcode-scanning';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
 import { useAppTheme } from '../theme/ThemeContext';
+import { useRoute } from '@react-navigation/native';
 
 export default function ImageScanScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const route = useRoute();
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [autoPickTriggered, setAutoPickTriggered] = useState(false);
 
   const scanImageForCodes = async (uri) => {
     try {
-      const { scanFromURLAsync } = await import('expo-barcode-scanner');
-      const codes = await scanFromURLAsync(uri, {
-        barCodeTypes: ['qr', 'ean13', 'ean8', 'upc_a', 'code39', 'code128']
-      });
-      if (codes && codes.length > 0 && codes[0]?.data) {
-        const data = codes[0].data;
-        setResult(classifyInput(data));
-        setError(null);
+      if (Platform.OS === 'web') {
+        const { BrowserMultiFormatReader } = await import('@zxing/library');
+        const reader = new BrowserMultiFormatReader();
+        const zxResult = await reader.decodeFromImageUrl(uri);
+        const data = zxResult?.getText?.();
+        if (data) {
+          setResult(classifyInput(data));
+          setError(null);
+        } else {
+          setResult(null);
+          setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
+        }
       } else {
-        setResult(null);
-        setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
+        const barcodes = await BarcodeScanning.scan(uri);
+        if (barcodes && barcodes.length > 0) {
+          const first = barcodes[0];
+          const data = first?.value || first?.rawValue || first?.displayValue;
+          if (data) {
+            setResult(classifyInput(data));
+            setError(null);
+          } else {
+            setResult(null);
+            setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
+          }
+        } else {
+          setResult(null);
+          setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
+        }
       }
     } catch (e) {
       setResult(null);
-      setError('Bu Expo çalışma ortamında barkod modülü yüklü değil. Geliştirme derlemesi (expo run:android) veya APK ile çalıştırın.');
+      setError(t('Bu görselde kod bulunamadı') || 'Bu görselde kod bulunamadı');
     }
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: [ImagePicker.MediaType.IMAGE], quality: 1 });
-    if (!res.canceled) {
-      const uri = res.assets[0].uri;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setError(t('Medya izni gerekli') || 'Medya izni gerekli');
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1
+      });
+      if (res.canceled) return;
+      const uri = res.assets?.[0]?.uri;
+      if (!uri) return;
       setImage(uri);
       await scanImageForCodes(uri);
+    } catch (e) {
+      setError('Görüntü seçerken bir sorun oluştu.');
     }
   };
+
+  useEffect(() => {
+    if (!autoPickTriggered && route?.params?.autoPick) {
+      setAutoPickTriggered(true);
+      // Defer to next tick to ensure screen is ready
+      setTimeout(() => {
+        pickImage();
+      }, 0);
+    }
+  }, [route, autoPickTriggered]);
 
   return (
     <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}> 
