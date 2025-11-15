@@ -6,12 +6,14 @@ import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { classifyInput } from '../utils/classifier';
 import { useAppTheme } from '../theme/ThemeContext';
 
 export default function CodeScanScreen({ navigation }) {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const isFocused = useIsFocused();
   const cameraRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -23,13 +25,13 @@ export default function CodeScanScreen({ navigation }) {
   const [gs1Country, setGs1Country] = useState(null);
   const [showCamera, setShowCamera] = useState(true);
 
+  // Her girişte (ekran odaklandığında) izni tekrar iste.
+  // Android OS izin ekranını otomatik tetikler (canAskAgain=true ise).
   useEffect(() => {
-    (async () => {
-      if (!permission || !permission.granted) {
-        await requestPermission();
-      }
-    })();
-  }, [permission]);
+    if (isFocused && !permission?.granted && permission?.canAskAgain !== false) {
+      (async () => { try { await requestPermission(); } catch {} })();
+    }
+  }, [isFocused, permission]);
 
   useEffect(() => {
     if (!showCamera && result) {
@@ -103,21 +105,27 @@ export default function CodeScanScreen({ navigation }) {
     }
   };
 
-  if (!permission) {
-    return <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]} />;
-  }
-
-  if (!permission.granted) {
+  // If permission not granted, show localized prompt and re-request button
+  if (!permission?.granted) {
+    const canAskAgain = permission?.canAskAgain !== false;
     return (
       <View style={[styles.center, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}>
         <Ionicons name="camera-outline" size={64} color={dark ? '#3b4654' : '#8b98a5'} />
         <Text style={[styles.permissionText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-          {t('We need your permission to show the camera') || 'Kamera kullanımı için izin gerekli'}
+          {t('camera.permission.message')}
         </Text>
-        <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
-          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-          <Text style={styles.grantBtnText}>İzin Ver</Text>
-        </TouchableOpacity>
+        {canAskAgain && (
+          <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
+            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            <Text style={styles.grantBtnText}>{t('camera.permission.allow')}</Text>
+          </TouchableOpacity>
+        )}
+        {!canAskAgain && (
+          <TouchableOpacity style={[styles.grantBtn, { backgroundColor: '#374151', marginTop: 10 }]} onPress={() => Linking.openSettings()}>
+            <Ionicons name="settings-outline" size={20} color="#fff" />
+            <Text style={styles.grantBtnText}>{t('camera.permission.openSettings')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

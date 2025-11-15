@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, FlatList } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
 
@@ -43,84 +43,73 @@ export default function ScanSelectScreen({ navigation }) {
     {
       id: 'create',
       route: 'CreateQR',
-      icon: 'add-circle',
+      iconFamily: 'MaterialCommunityIcons',
+      icon: 'qrcode-plus',
       colors: dark ? ['#3a1c32', '#d946ef'] : ['#ec4899', '#f472b6'],
       iconColor: dark ? '#ffd6e7' : '#ffffff',
       title: t('scan.create'),
       description: t('scan.create.description'),
-      emoji: '✳️'
+      emoji: '🖨️'
+    },
+
+  ];
+
+  // Append History and Settings to the grid per request
+  scanOptions.push(
+    {
+      id: 'history',
+      route: 'History',
+      icon: 'time-outline',
+      colors: dark ? ['#243044', '#0ea5e9'] : ['#38bdf8', '#60a5fa'],
+      iconColor: dark ? '#9ecaff' : '#ffffff',
+      title: t('history.title'),
+      description: t('history.description'),
+      emoji: '🕘'
     },
     {
       id: 'settings',
       route: 'Settings',
       icon: 'settings-outline',
-      colors: dark ? ['#4d2e1a', '#f59e0b'] : ['#f59e0b', '#fbbf24'],
+      colors: dark ? ['#3b2c52', '#7c3aed'] : ['#a78bfa', '#c4b5fd'],
       iconColor: dark ? '#c1b6ff' : '#ffffff',
       title: t('settings.title'),
       description: t('settings.description'),
       emoji: '⚙️'
     }
-  ];
+  );
 
   return (
-    <ScrollView 
+    <View 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
     >
-      {/* Header Section */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerEmoji}>🛡️</Text>
-          <Text style={[styles.title, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-            {t('scan.select.title')}
-          </Text>
-        </View>
-        <Text style={[styles.subtitle, { color: dark ? '#8b98a5' : '#5c6b7c' }]}>
-          {t('scan.select.subtitle')}
-        </Text>
-      </View>
+      
+      {/* Header removed per request */}
 
       {/* Scan Options Grid */}
       <View style={styles.grid}>
-        {scanOptions.map((option, index) => (
-          <ScanCard
-            key={option.id}
-            option={option}
-            dark={dark}
-            onPress={() => navigation.navigate(
-              option.route,
-              option.id === 'image' ? { autoPick: true } : undefined
-            )}
-            index={index}
-          />
-        ))}
+        <FlatList
+          data={scanOptions}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          scrollEnabled={false}
+          style={styles.gridList}
+          contentContainerStyle={styles.gridContent}
+          columnWrapperStyle={styles.gridRow}
+          renderItem={({ item, index }) => (
+            <ScanCard
+              option={item}
+              dark={dark}
+              onPress={() => navigation.navigate(
+                item.route,
+                item.id === 'image' ? { autoPick: true } : undefined
+              )}
+              index={index}
+            />
+          )}
+        />
       </View>
 
-      {/* Quick Stats */}
-      <View style={styles.statsContainer}>
-        <StatCard 
-          icon="shield-checkmark" 
-          value="99.8%" 
-          label={t('stats.accuracy')}
-          color={dark ? '#7ee787' : '#2da44e'}
-          dark={dark}
-        />
-        <StatCard 
-          icon="flash" 
-          value="<1s" 
-          label={t('stats.speed')}
-          color={dark ? '#58a6ff' : '#0366d6'}
-          dark={dark}
-        />
-        <StatCard 
-          icon="lock-closed" 
-          value="100%" 
-          label={t('stats.secure')}
-          color={dark ? '#d29922' : '#bf8700'}
-          dark={dark}
-        />
-      </View>
+      {/* Quick Stats removed per request */}
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -128,7 +117,7 @@ export default function ScanSelectScreen({ navigation }) {
           {t('scan.footer.text')}
         </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -166,21 +155,15 @@ function ScanCard({ option, dark, onPress, index }) {
           style={styles.card}
         >
           <View style={styles.cardContent}>
-            <View style={styles.emojiContainer}>
-              <Text style={styles.emoji}>{option.emoji}</Text>
-            </View>
+            {/* Single visual only: emoji removed */}
             
-            <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Ionicons name={option.icon} size={32} color={option.iconColor} />
+            <View style={styles.iconContainer}>
+              <Text style={styles.iconEmoji}>{option.emoji}</Text>
             </View>
             
             <View style={styles.cardTextContainer}>
-              <Text style={styles.cardTitle}>{option.title}</Text>
-              <Text style={styles.cardDescription}>{option.description}</Text>
-            </View>
-
-            <View style={styles.arrowContainer}>
-              <Ionicons name="arrow-forward" size={20} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
+              <Text style={styles.cardDescription} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -230,11 +213,9 @@ function RiskBadge({ level }) {
 
 const styles = StyleSheet.create({
   container: { 
-    flex: 1 
-  },
-  contentContainer: {
+    flex: 1,
     padding: 20,
-    paddingBottom: 40
+    paddingBottom: 20
   },
   header: {
     marginBottom: 24,
@@ -285,11 +266,24 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   grid: { 
-    gap: 16,
-    marginBottom: 24
+    flex: 1,
+    marginBottom: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  gridList: {
+    flex: 1
+  },
+  gridContent: {
+    flexGrow: 1,
+    justifyContent: 'center'
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16
   },
   cardWrapper: {
-    width: '100%'
+    width: '48%'
   },
   card: { 
     borderRadius: 20,
@@ -298,53 +292,42 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 6
+    elevation: 6,
+    height: 190
   },
   cardContent: {
-    padding: 20,
-    minHeight: 140
+    padding: 18,
+    paddingBottom: 18
   },
-  emojiContainer: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    opacity: 0.3
-  },
-  emoji: {
-    fontSize: 48
-  },
+  
   iconContainer: {
     width: 64,
     height: 64,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12
+    marginBottom: 12,
+    alignSelf: 'center'
+  },
+  iconEmoji: {
+    fontSize: 36
   },
   cardTextContainer: {
-    gap: 4
+    gap: 4,
+    alignItems: 'center'
   },
   cardTitle: { 
-    fontSize: 20, 
+    fontSize: 19, 
     fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 4
+    marginBottom: 2,
+    textAlign: 'center'
   },
   cardDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.9)',
-    lineHeight: 20
-  },
-  arrowContainer: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center'
+    lineHeight: 20,
+    textAlign: 'center'
   },
   statsContainer: {
     flexDirection: 'row',

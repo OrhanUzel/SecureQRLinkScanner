@@ -6,6 +6,7 @@ import { useAppTheme } from '../theme/ThemeContext';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import ViewShot, { captureRef } from 'react-native-view-shot';
+import Toast from '../components/Toast';
 
 export default function CreateQrScreen() {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ export default function CreateQrScreen() {
   const isWeb = Platform.OS === 'web';
   const qrRef = useRef(null);
   const [inputHeight, setInputHeight] = useState(44);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   const generateMatrix = useCallback(async (text) => {
     try {
@@ -118,7 +120,7 @@ export default function CreateQrScreen() {
         const uri = await captureRef(qrRef, { format: 'png', quality: 1, result: 'tmpfile' });
         if (!uri) throw new Error('capture_failed');
         await MediaLibrary.saveToLibraryAsync(uri);
-        Alert.alert(t('saved_to_gallery') || 'Galeriye kaydedildi');
+        setToast({ visible: true, message: t('saved_to_gallery') || 'Galeriye kaydedildi', type: 'success' });
       }
     } catch (e) {
       Alert.alert(t('qr_generation_error') || 'QR kod oluşturulamadı. Lütfen tekrar deneyin.');
@@ -151,7 +153,7 @@ export default function CreateQrScreen() {
         }
       }
     } catch (e) {
-      Alert.alert(t('share_unavailable') || 'Paylaşım şu anda kullanılamıyor');
+      setToast({ visible: true, message: t('share_unavailable') || 'Paylaşım şu anda kullanılamıyor', type: 'error' });
     }
   };
 
@@ -328,6 +330,13 @@ export default function CreateQrScreen() {
           {t('info_text') || 'QR kodları URL, metin, telefon numarası, e-posta adresi ve daha fazlasını içerebilir. Maksimum 2.953 karakter desteklenir.'}
         </Text>
       </View>
+      <Toast 
+        visible={toast.visible} 
+        message={toast.message}
+        type={toast.type}
+        dark={dark}
+        onHide={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </ScrollView>
   );
 }

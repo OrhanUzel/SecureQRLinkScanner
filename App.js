@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -42,21 +43,47 @@ function RootNavigator() {
           component={ScanSelectScreen}
           options={({ navigation }) => ({
             title: i18n.t('app.title'),
-            headerRight: () => (
-              <Ionicons
-                name="time-outline"
-                size={22}
-                color={dark ? '#9ecaff' : '#0066cc'}
-                onPress={() => navigation.navigate('History')}
-              />
-            ),
+            headerTitleAlign: 'center',
+
             headerLeft: () => (
-              <Ionicons
-                name="settings-outline"
-                size={22}
-                color={dark ? '#c1b6ff' : '#6c5ce7'}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('History')}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: dark ? '#243044' : '#dbe2ea',
+                  backgroundColor: dark ? '#172031' : '#eef3f9'
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name="time-outline"
+                  size={18}
+                  color={dark ? '#9ecaff' : '#0066cc'}
+                />
+              </TouchableOpacity>
+            ),
+            headerRight: () => (
+              <TouchableOpacity
                 onPress={() => navigation.navigate('Settings')}
-              />
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: dark ? '#3b2c52' : '#e3def8',
+                  backgroundColor: dark ? '#1f1630' : '#f4f1fb'
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name="settings-outline"
+                  size={18}
+                  color={dark ? '#c1b6ff' : '#6c5ce7'}
+                />
+              </TouchableOpacity>
             )
           })}
         />
@@ -73,7 +100,7 @@ function RootNavigator() {
 }
 
 export default function App() {
-  const [consented, setConsented] = useState(true);
+  const [consented, setConsented] = useState(false);
 
   useEffect(() => {
     (async () => {

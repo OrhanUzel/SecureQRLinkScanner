@@ -5,12 +5,14 @@ import { useTranslation } from 'react-i18next';
 import { setLanguage } from '../i18n';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
+import { getConsentInfo } from '../components/ConsentModal';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { dark, theme, setTheme } = useAppTheme();
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
+  const [consentInfo, setConsentInfo] = useState(null);
 
   useEffect(() => {
     loadSettings();
@@ -18,13 +20,15 @@ export default function SettingsScreen() {
 
   const loadSettings = async () => {
     try {
-      const [savedLang, savedTheme] = await Promise.all([
+      const [savedLang, savedTheme, consent] = await Promise.all([
         AsyncStorage.getItem('language'),
-        AsyncStorage.getItem('theme')
+        AsyncStorage.getItem('theme'),
+        getConsentInfo()
       ]);
       
       if (savedLang) setLanguage(savedLang);
       if (savedTheme) setTheme(savedTheme);
+      if (consent) setConsentInfo(consent);
     } catch (error) {
       console.error('Settings yüklenirken hata:', error);
     } finally {
@@ -205,6 +209,32 @@ export default function SettingsScreen() {
         <Text style={styles.disclaimerIcon}>📋</Text>
         <Text style={styles.disclaimerText}>{t('settings.disclaimer')}</Text>
       </TouchableOpacity>
+
+      {/* Consent Info */}
+      {consentInfo && (
+        <View style={[styles.section, { marginTop: 20 }]}> 
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionIcon, { fontSize: 20 }]}>✅</Text>
+            <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+              {t('settings.consent.info')}
+            </Text>
+          </View>
+          <View style={{
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: dark ? '#30363d' : '#e1e4e8',
+            backgroundColor: dark ? '#161b22' : '#ffffff'
+          }}>
+            <Text style={{ color: dark ? '#c9d1d9' : '#24292f', fontSize: 14, marginBottom: 6 }}>
+              {t('settings.consent.date')}: {new Date(consentInfo.timestamp).toLocaleString()}
+            </Text>
+            <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
+              {t('settings.consent.version')}: {consentInfo.appVersion}
+            </Text>
+          </View>
+        </View>
+      )}
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>

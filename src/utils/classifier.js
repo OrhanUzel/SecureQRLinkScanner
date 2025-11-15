@@ -59,7 +59,8 @@ const SCORE_WEIGHTS = {
   shortener: 2,
   port: 1,
   pathEntropy: 2,
-  brandMismatch: 3
+  brandMismatch: 3,
+  executable: 3
 };
 
 // Score thresholds
@@ -67,6 +68,13 @@ const THRESHOLDS = {
   unsafe: 4,
   suspicious: 2
 };
+
+// Executable file extensions and safe hosts (official sources)
+const EXECUTABLE_EXTS = /\.(apk|exe|msi|dmg|pkg|deb|rpm|appx|ipa)(?:[?#]|$)/i;
+const SAFE_EXECUTABLE_HOSTS = [
+  'play.google.com',
+  'dl.google.com'
+];
 
 // ------------------------
 // Utility Functions
@@ -356,6 +364,16 @@ async function classifyURL(urlString, u) {
     score += SCORE_WEIGHTS.pathEntropy;
   }
 
+  // Executable download detection (.apk, .exe, etc.)
+  if (EXECUTABLE_EXTS.test(path)) {
+    const normalizedHost = normalizeHost(host);
+    const isSafeHost = SAFE_EXECUTABLE_HOSTS.some(d => normalizedHost === d || normalizedHost.endsWith('.' + d));
+    if (!isSafeHost) {
+      reasons.push('classifier.executableWarning');
+      score += SCORE_WEIGHTS.executable;
+    }
+  }
+
   // 11. Brand impersonation detection
   const normalizedHost = normalizeHost(host);
   const baseDomain = getBaseDomain(normalizedHost);
@@ -494,6 +512,16 @@ export function classifyInput(input) {
     if (path.length > 90 && (encodedChars > 10 || nonWords > 25 || hasLongBase64)) {
       reasons.push('classifier.pathEntropyWarning');
       score += SCORE_WEIGHTS.pathEntropy;
+    }
+
+    // Executable download detection (.apk, .exe, etc.)
+    if (EXECUTABLE_EXTS.test(path)) {
+      const normalizedHost = normalizeHost(host);
+      const isSafeHost = SAFE_EXECUTABLE_HOSTS.some(d => normalizedHost === d || normalizedHost.endsWith('.' + d));
+      if (!isSafeHost) {
+        reasons.push('classifier.executableWarning');
+        score += SCORE_WEIGHTS.executable;
+      }
     }
     
     const normalizedHost = normalizeHost(host);
