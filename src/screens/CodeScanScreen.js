@@ -10,6 +10,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { classifyInput } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
+import AdBanner from '../components/AdBanner';
 
 export default function CodeScanScreen({ navigation }) {
   const { t } = useTranslation();
@@ -307,6 +308,11 @@ export default function CodeScanScreen({ navigation }) {
             )}
           </View>
         </Animated.View>
+      )}
+      {result && !showCamera && (
+        <View style={{ paddingHorizontal: 20 }}>
+          <AdBanner placement="code" />
+        </View>
       )}
     </View>
   );

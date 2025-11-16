@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
+import AdBanner from '../components/AdBanner';
 
 export default function ScanSelectScreen({ navigation }) {
   const { t } = useTranslation();
@@ -112,6 +113,7 @@ export default function ScanSelectScreen({ navigation }) {
       {/* Quick Stats removed per request */}
 
       {/* Footer */}
+      <AdBanner placement="home" />
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
           {t('scan.footer.text')}
@@ -143,30 +145,33 @@ function ScanCard({ option, dark, onPress, index }) {
   return (
     <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
-        activeOpacity={0.9}
+        activeOpacity={1}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        style={styles.touch}
+        focusable={false}
       >
-        <LinearGradient
-          colors={option.colors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.card}
-        >
-          <View style={styles.cardContent}>
-            {/* Single visual only: emoji removed */}
-            
-            <View style={styles.iconContainer}>
-              <Text style={styles.iconEmoji}>{option.emoji}</Text>
+        <View style={styles.cardShadow}>
+          <LinearGradient
+            colors={option.colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.card}
+          >
+            <View style={styles.cardContent}>
+              
+              <View style={styles.iconContainer}>
+                <Text style={styles.iconEmoji}>{option.emoji}</Text>
+              </View>
+              
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
+                <Text style={styles.cardDescription} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
+              </View>
             </View>
-            
-            <View style={styles.cardTextContainer}>
-              <Text style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
-              <Text style={styles.cardDescription} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
-            </View>
-          </View>
-        </LinearGradient>
+          </LinearGradient>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -285,15 +290,22 @@ const styles = StyleSheet.create({
   cardWrapper: {
     width: '48%'
   },
-  card: { 
+  touch: {
     borderRadius: 20,
-    overflow: 'hidden',
+  },
+  cardShadow: {
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 6,
     height: 190
+  },
+  card: { 
+    borderRadius: 20,
+    overflow: 'hidden',
+    height: '100%'
   },
   cardContent: {
     padding: 18,

@@ -69,7 +69,7 @@ export async function getConsentInfo() {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal: { width: '100%', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(100,100,100,0.2)' },
+  modal: { width: '100%', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(100,100,100,0.2)', overflow: 'hidden' },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   title: { fontSize: 18, fontWeight: '700' },
   message: { fontSize: 14, marginBottom: 8 },

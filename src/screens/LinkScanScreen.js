@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
+import AdBanner from '../components/AdBanner';
 
 export default function LinkScanScreen() {
   const { t } = useTranslation();
@@ -173,6 +174,7 @@ export default function LinkScanScreen() {
           </View>
         </View>
       )}
+      <AdBanner placement="link" />
     </View>
   );
 }

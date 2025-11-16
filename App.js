@@ -106,8 +106,8 @@ export default function App() {
     (async () => {
       const ok = await hasConsent();
       setConsented(ok);
-      // Preload blacklist so classification can check synchronously
-      try { await loadBlacklist(); } catch {}
+      // Blacklist ön yükleme devre dışı (isteğe bağlı):
+      // try { await loadBlacklist(); } catch {}
     })();
   }, []);
 

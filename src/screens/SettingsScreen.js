@@ -13,22 +13,45 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
   const [consentInfo, setConsentInfo] = useState(null);
+  const [premium, setPremium] = useState(false);
+  const [iap, setIap] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [processing, setProcessing] = useState(false);
+  const SKU_REMOVE_ADS = 'remove_ads';
 
   useEffect(() => {
     loadSettings();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const mod = await import('react-native-iap');
+        setIap(mod);
+        try { await mod.initConnection(); } catch {}
+        let items = [];
+        try { items = await mod.getProducts({ skus: [SKU_REMOVE_ADS] }); } catch {}
+        if (!items || items.length === 0) {
+          try { items = await mod.getProducts([SKU_REMOVE_ADS]); } catch {}
+        }
+        if (items && items.length) setProducts(items);
+      } catch {}
+    })();
+  }, []);
+
   const loadSettings = async () => {
     try {
-      const [savedLang, savedTheme, consent] = await Promise.all([
+      const [savedLang, savedTheme, consent, premiumFlag] = await Promise.all([
         AsyncStorage.getItem('language'),
         AsyncStorage.getItem('theme'),
-        getConsentInfo()
+        getConsentInfo(),
+        AsyncStorage.getItem('premium')
       ]);
       
       if (savedLang) setLanguage(savedLang);
       if (savedTheme) setTheme(savedTheme);
       if (consent) setConsentInfo(consent);
+      if (premiumFlag === 'true') setPremium(true);
     } catch (error) {
       console.error('Settings yüklenirken hata:', error);
     } finally {
@@ -56,6 +79,27 @@ export default function SettingsScreen() {
 
   const openDisclaimer = () => {
     navigation.navigate('Disclaimer');
+  };
+
+  const onRemoveAds = async () => {
+    try {
+      if (iap) {
+        setProcessing(true);
+        let purchased = null;
+        try { purchased = await iap.requestPurchase({ sku: SKU_REMOVE_ADS }); } catch {}
+        if (!purchased) {
+          try { purchased = await iap.requestPurchase(SKU_REMOVE_ADS); } catch {}
+        }
+        if (purchased) {
+          await AsyncStorage.setItem('premium', 'true');
+          setPremium(true);
+        }
+        setProcessing(false);
+        return;
+      }
+      await AsyncStorage.setItem('premium', 'true');
+      setPremium(true);
+    } catch {}
   };
 
   const languages = [
@@ -197,6 +241,39 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+        </View>
+      </View>
+
+      {/* Premium */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>Premium</Text>
+        </View>
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: dark ? '#30363d' : '#e1e4e8',
+          backgroundColor: dark ? '#161b22' : '#ffffff'
+        }}>
+          <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
+            Reklamsız deneyime geçerek daha hızlı ve temiz arayüz kullanın.
+          </Text>
+          {!premium ? (
+            <TouchableOpacity 
+              style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
+              onPress={onRemoveAds}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.disclaimerIcon}>🚀</Text>
+              <Text style={styles.disclaimerText}>{processing ? 'İşlem yapılıyor...' : 'Reklamları kaldır'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ marginTop: 12 }}>
+              <Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>Premium aktif</Text>
+            </View>
+          )}
         </View>
       </View>
 

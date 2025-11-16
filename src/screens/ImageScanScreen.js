@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
 import { useAppTheme } from '../theme/ThemeContext';
 import { useRoute } from '@react-navigation/native';
+import AdBanner from '../components/AdBanner';
 
 export default function ImageScanScreen() {
   const { t } = useTranslation();
@@ -110,6 +111,7 @@ export default function ImageScanScreen() {
           ) : null}
         </View>
       )}
+      <AdBanner placement="image" />
     </View>
   );
 }

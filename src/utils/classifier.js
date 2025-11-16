@@ -283,8 +283,8 @@ async function classifyURL(urlString, u) {
   const reasons = [];
   let score = 0;
 
-  // 1. Blacklist check (blocks until loaded)
-  await loadBlacklist();
+  // 1. Blacklist check devre dışı: yükleme beklenmiyor
+  // await loadBlacklist();
   if (isBlacklisted(host)) {
     reasons.push('classifier.blacklistWarning');
     score += SCORE_WEIGHTS.blacklist;
