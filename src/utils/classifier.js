@@ -407,21 +407,19 @@ async function classifyURL(urlString, u) {
   return { level, reasons, score };
 }
 
-function classifyText(text) {
-  const reasons = [];
-  let score = 0;
-  const lowerText = text.toLowerCase();
-  
-  const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
-  if (foundKeywords.length > 0) {
-    reasons.push('classifier.keywordWarning');
-    score += foundKeywords.length;
-  }
-  
-  const level = score >= 3 ? 'unsafe' : score >= 1 ? 'suspicious' : 'secure';
-  
-  return { level, reasons, score };
-}
+// classifyText temporarily disabled (txt-based search off)
+// function classifyText(text) {
+//   const reasons = [];
+//   let score = 0;
+//   const lowerText = text.toLowerCase();
+//   const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
+//   if (foundKeywords.length > 0) {
+//     reasons.push('classifier.keywordWarning');
+//     score += foundKeywords.length;
+//   }
+//   const level = score >= 3 ? 'unsafe' : score >= 1 ? 'suspicious' : 'secure';
+//   return { level, reasons, score };
+// }
 
 // ------------------------
 // Public API
@@ -555,8 +553,10 @@ export function classifyInput(input) {
     return { normalized, isUrl: true, level, reasons, score };
     
   } catch (e) {
-    // Not a URL, classify as text
-    const { level, reasons, score } = classifyText(normalized);
+    // Not a URL: txt-based classification disabled
+    const level = 'secure';
+    const reasons = [];
+    const score = 0;
     saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
     return { normalized, isUrl: false, level, reasons, score };
   }
@@ -585,8 +585,10 @@ export async function classifyInputAsync(input) {
     return { normalized, isUrl: true, level, reasons, score };
     
   } catch (e) {
-    // Not a URL, classify as text
-    const { level, reasons, score } = classifyText(normalized);
+    // Not a URL: txt-based classification disabled
+    const level = 'secure';
+    const reasons = [];
+    const score = 0;
     saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
     return { normalized, isUrl: false, level, reasons, score };
   }

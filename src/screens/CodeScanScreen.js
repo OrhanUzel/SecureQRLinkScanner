@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Animated, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { classifyInput } from '../utils/classifier';
+import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
 
 export default function CodeScanScreen({ navigation }) {
@@ -24,6 +25,8 @@ export default function CodeScanScreen({ navigation }) {
   const [facing, setFacing] = useState('back');
   const [gs1Country, setGs1Country] = useState(null);
   const [showCamera, setShowCamera] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   // Her girişte (ekran odaklandığında) izni tekrar iste.
   // Android OS izin ekranını otomatik tetikler (canAskAgain=true ise).
@@ -70,15 +73,41 @@ export default function CodeScanScreen({ navigation }) {
       usomBad = await isUsomUnsafe(data) || await isUsomHostUnsafe(data);
     } catch {}
 
+    setLoading(true);
     const res = classifyInput(data);
-    const reasons = usomBad ? [...(res.reasons || []), 'classifier.usomWarning'] : res.reasons || [];
-    const level = usomBad ? 'unsafe' : res.level;
-    const updated = { ...res, level, reasons };
+    let updated = { ...res };
+
+    // Uzaktan risk kontrolü (yalnızca URL ise)
+    try {
+      if (res.isUrl) {
+        const remote = await checkRisk(res.normalized);
+        if (remote?.error) {
+          setOffline(true);
+        } else {
+          setOffline(false);
+        }
+        if (remote?.isRisky) {
+          const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
+          const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+          const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+          updated = { ...res, level: 'unsafe', reasons };
+        }
+      }
+    } catch {
+      setOffline(true);
+    }
+
+    if (usomBad) {
+      const reasons = [ ...(updated.reasons || []), 'classifier.usomWarning' ];
+      updated = { ...updated, level: 'unsafe', reasons };
+    }
+
     setResult(updated);
     setShowCamera(false);
     saveHistory({ content: updated.normalized, level: updated.level });
     const country = detectGs1Country(data);
     setGs1Country(country);
+    setLoading(false);
   };
 
   const openLink = () => {
@@ -132,6 +161,18 @@ export default function CodeScanScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {offline && (
+        <View style={styles.offlineBar}>
+          <Ionicons name="wifi" size={18} color={'#cf222e'} />
+          <Text style={styles.offlineText}>{t('alerts.offline')}</Text>
+        </View>
+      )}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={'#9ecaff'} />
+          <Text style={[styles.loadingText, { color: '#fff' }]}>{t('loading.securityChecks')}</Text>
+        </View>
+      )}
       {showCamera && (
         <>
           <CameraView
@@ -168,7 +209,7 @@ export default function CodeScanScreen({ navigation }) {
               <View style={[styles.corner, styles.cornerBR]} />
             </View>
             <Text style={styles.guideText}>
-              QR kodu veya barkodu çerçeve içine hizalayın
+              {t('scan.guide.align')}
             </Text>
           </View>
         </>
@@ -197,7 +238,7 @@ export default function CodeScanScreen({ navigation }) {
           <View style={[styles.resultCard, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#e5e9f0' }]}> 
             <View style={styles.resultSection}>
               <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
-                {result.isUrl ? 'URL' : 'İçerik'}
+                {result.isUrl ? t('label.url') : t('label.content')}
               </Text>
               <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0066cc' }]} numberOfLines={3}>
                 {result.normalized}
@@ -412,6 +453,44 @@ function detectGs1Country(raw) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  loadingOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    zIndex: 50,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  offlineBar: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 60,
+    borderWidth: 1,
+    borderColor: 'rgba(207,34,46,0.25)',
+    backgroundColor: 'rgba(207,34,46,0.1)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  offlineText: {
+    color: '#cf222e',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
   camera: { flex: 1 },
   overlay: {
     position: 'absolute',

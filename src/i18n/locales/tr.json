@@ -82,5 +82,13 @@
   "download_unavailable_detail": "Görsel indirme için ek modül gerekir. Web’de indirilebilir; yerelde SVG/ek modülle ekleyebiliriz.",
   "share_unavailable": "Paylaşım şu anda kullanılamıyor",
   "saved_to_gallery": "Galeriye kaydedildi",
-  "permission_required_media": "Medya iznine ihtiyaç var"
+  "permission_required_media": "Medya iznine ihtiyaç var",
+  "loading.securityChecks": "Güvenlik kontrolleri yapılıyor...",
+  "alerts.offline": "İnternet bağlantısı bulunamadı. İnternet ile daha iyi analiz yapılır.",
+  "remoteRisk.defaultMessage": "Girilen bağlantı güvenlik risk listelerinde yer alıyor. Lütfen dikkatli ilerleyin.",
+  "remoteRisk.checkedDomainLabel": "Kontrol edilen alan adı:",
+  "remoteRisk.sourcesLabel": "Kaynaklar:",
+  "label.url": "URL",
+  "label.content": "İçerik",
+  "scan.guide.align": "QR kodu veya barkodu çerçeve içine hizalayın"
 }

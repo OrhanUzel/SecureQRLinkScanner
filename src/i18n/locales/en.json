@@ -81,5 +81,13 @@
   "download_unavailable_detail": "Saving an image requires an extra module. It works on Web; on native we can add SVG/extra module support.",
   "share_unavailable": "Sharing is currently unavailable",
   "saved_to_gallery": "Saved to gallery",
-  "permission_required_media": "Media permission is required"
+  "permission_required_media": "Media permission is required",
+  "loading.securityChecks": "Running security checks...",
+  "alerts.offline": "No internet connection. Better analysis is available online.",
+  "remoteRisk.defaultMessage": "This link appears on external security risk lists. Proceed with caution.",
+  "remoteRisk.checkedDomainLabel": "Checked domain:",
+  "remoteRisk.sourcesLabel": "Sources:",
+  "label.url": "URL",
+  "label.content": "Content",
+  "scan.guide.align": "Align the QR code or barcode within the frame"
 }

@@ -78,5 +78,13 @@
   "download_unavailable_detail": "Guardar una imagen requiere un módulo adicional. Funciona en Web; en nativo podemos añadir soporte SVG/módulo extra.",
   "share_unavailable": "Compartir no está disponible actualmente",
   "saved_to_gallery": "Guardado en la galería",
-  "permission_required_media": "Se requiere permiso de medios"
+  "permission_required_media": "Se requiere permiso de medios",
+  "loading.securityChecks": "Ejecutando comprobaciones de seguridad...",
+  "alerts.offline": "Sin conexión a Internet. Hay un mejor análisis en línea.",
+  "remoteRisk.defaultMessage": "Este enlace figura en listas externas de riesgo de seguridad. Procede con precaución.",
+  "remoteRisk.checkedDomainLabel": "Dominio verificado:",
+  "remoteRisk.sourcesLabel": "Fuentes:",
+  "label.url": "URL",
+  "label.content": "Contenido",
+  "scan.guide.align": "Alinea el código QR o código de barras dentro del marco"
 }

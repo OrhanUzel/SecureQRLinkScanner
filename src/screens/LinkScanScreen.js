@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
+import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
 
 export default function LinkScanScreen() {
@@ -11,6 +12,8 @@ export default function LinkScanScreen() {
   const { dark } = useAppTheme();
   const [input, setInput] = useState('');
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [offline, setOffline] = useState(false);
 
  const onAnalyze = async () => {
   if (!input.trim()) return;
@@ -18,17 +21,43 @@ export default function LinkScanScreen() {
   // İlk yükleme için loading state ekleyin
   //setLoading(true);
   
+  setLoading(true);
   try {
-    // Blacklist'i yükleyip ardından sınıflandır
-    await loadBlacklist();
+    // Blacklist yükleme devre dışı (isteğe bağlı):
+    // await loadBlacklist();
     const res = classifyInput(input.trim());
-    setResult(res);
+
+    // Uzaktan risk kontrolü (yalnızca URL ise)
+    let updated = res;
+    if (res.isUrl) {
+      try {
+        const remote = await checkRisk(res.normalized);
+        // If remote check failed due to network, show offline warning
+        if (remote?.error) {
+          setOffline(true);
+        } else {
+          setOffline(false);
+        }
+        if (remote?.isRisky) {
+          const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
+          const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+          const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+          updated = { ...res, level: 'unsafe', reasons };
+        }
+      } catch (e) {
+        // Uzaktan kontrol başarısız ise (muhtemelen ağ yok) uyarı barını göster
+        setOffline(true);
+      }
+    }
+
+    setResult(updated);
   } catch (error) {
     console.error('Analysis failed:', error);
-    // Hata durumunda fallback
     const res = classifyInput(input.trim());
     setResult(res);
-  } 
+  } finally {
+    setLoading(false);
+  }
 };
 
   const clearInput = () => {
@@ -64,6 +93,18 @@ export default function LinkScanScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}> 
+      {offline && (
+        <View style={[styles.alertBar, { backgroundColor: dark ? 'rgba(207,34,46,0.15)' : 'rgba(207,34,46,0.1)', borderColor: dark ? 'rgba(207,34,46,0.3)' : 'rgba(207,34,46,0.25)' }]}> 
+          <Ionicons name="wifi" size={18} color={dark ? '#ffb4b9' : '#cf222e'} />
+          <Text style={[styles.alertText, { color: dark ? '#ffb4b9' : '#cf222e' }]}>{t('alerts.offline')}</Text>
+        </View>
+      )}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={dark ? '#9ecaff' : '#0969da'} />
+          <Text style={[styles.loadingText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('loading.securityChecks')}</Text>
+        </View>
+      )}
       <View style={styles.inputContainer}>
         <TextInput
           style={[styles.input, { backgroundColor: dark ? '#10151c' : '#fff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
@@ -164,6 +205,22 @@ const styles = StyleSheet.create({
     padding: 20, 
     gap: 16 
   },
+  loadingOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    zIndex: 100,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '600'
+  },
   inputContainer: {
     position: 'relative',
     width: '100%'
@@ -205,6 +262,20 @@ const styles = StyleSheet.create({
     color: '#fff', 
     fontWeight: '700',
     fontSize: 16
+  },
+  alertBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  alertText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   card: { 
     borderWidth: 1, 
