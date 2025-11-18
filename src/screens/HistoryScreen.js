@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
+import AdvancedAdCard from '../components/AdvancedAdCard';
 
 export default function HistoryScreen() {
   const { t } = useTranslation();
@@ -40,6 +41,7 @@ export default function HistoryScreen() {
           </View>
         )}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ListFooterComponent={<AdvancedAdCard placement="history" />}
       />
     </View>
   );

@@ -34,6 +34,7 @@
     "react-dom": "19.1.0",
     "react-i18next": "^16.2.0",
     "react-native": "0.81.5",
+    "react-native-admob-native-ads": "^0.7.6",
     "react-native-google-mobile-ads": "^16.0.0",
     "react-native-iap": "^14.4.45",
     "react-native-safe-area-context": "~5.6.0",

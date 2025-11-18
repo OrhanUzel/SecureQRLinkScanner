@@ -6,6 +6,7 @@ import { setLanguage } from '../i18n';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
+import AdvancedAdCard from '../components/AdvancedAdCard';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -312,6 +313,8 @@ export default function SettingsScreen() {
           </View>
         </View>
       )}
+
+      <AdvancedAdCard placement="settings" />
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>

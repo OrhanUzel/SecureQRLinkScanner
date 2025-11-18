@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -7,10 +7,15 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import Toast from '../components/Toast';
+import AdvancedAdCard from '../components/AdvancedAdCard';
+import AdBanner from '../components/AdBanner';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 
 export default function CreateQrScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const navigation = useNavigation();
   const [input, setInput] = useState('');
   const [matrix, setMatrix] = useState(null);
   const [error, setError] = useState(null);
@@ -19,6 +24,14 @@ export default function CreateQrScreen() {
   const qrRef = useRef(null);
   const [inputHeight, setInputHeight] = useState(44);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [premium, setPremium] = useState(false);
+  const [rewardVisible, setRewardVisible] = useState(false);
+  const [rewardCountdown, setRewardCountdown] = useState(0);
+  const rewardActionRef = useRef(null);
+  const rewardTimerRef = useRef(null);
+  const rewardResolveRef = useRef(null);
+  const [infoVisible, setInfoVisible] = useState(false);
+  const [infoMessage, setInfoMessage] = useState('');
 
   const generateMatrix = useCallback(async (text) => {
     try {
@@ -69,6 +82,39 @@ export default function CreateQrScreen() {
     return () => clearTimeout(timeoutId);
   }, [input, generateMatrix]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem('premium');
+        setPremium(v === 'true');
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (rewardVisible) {
+      if (rewardTimerRef.current) clearInterval(rewardTimerRef.current);
+      setRewardCountdown(3);
+      rewardTimerRef.current = setInterval(() => {
+        setRewardCountdown((c) => {
+          if (c <= 1) {
+            if (rewardTimerRef.current) clearInterval(rewardTimerRef.current);
+            rewardTimerRef.current = null;
+            return 0;
+          }
+          return c - 1;
+        });
+      }, 1000);
+    } else {
+      if (rewardTimerRef.current) clearInterval(rewardTimerRef.current);
+      rewardTimerRef.current = null;
+    }
+    return () => {
+      if (rewardTimerRef.current) clearInterval(rewardTimerRef.current);
+      rewardTimerRef.current = null;
+    };
+  }, [rewardVisible]);
+
   const clearInput = () => {
     setInput('');
     setMatrix(null);
@@ -99,7 +145,7 @@ export default function CreateQrScreen() {
     return canvas.toDataURL('image/png');
   };
 
-  const onDownload = async () => {
+  const performDownload = async () => {
     try {
       if (!matrix) return;
       if (isWeb) {
@@ -111,23 +157,25 @@ export default function CreateQrScreen() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        return true;
       } else {
         const perm = await MediaLibrary.requestPermissionsAsync();
         if (!perm.granted) {
           Alert.alert(t('permission_required_media') || 'Medya izni gerekli');
-          return;
+          return false;
         }
         const uri = await captureRef(qrRef, { format: 'png', quality: 1, result: 'tmpfile' });
         if (!uri) throw new Error('capture_failed');
         await MediaLibrary.saveToLibraryAsync(uri);
-        setToast({ visible: true, message: t('saved_to_gallery') || 'Galeriye kaydedildi', type: 'success' });
+        return true;
       }
     } catch (e) {
       Alert.alert(t('qr_generation_error') || 'QR kod oluşturulamadı. Lütfen tekrar deneyin.');
+      return false;
     }
   };
 
-  const onShare = async () => {
+  const performShare = async () => {
     try {
       if (isWeb) {
         const canvasUrl = buildCanvasDataUrl();
@@ -155,6 +203,99 @@ export default function CreateQrScreen() {
     } catch (e) {
       setToast({ visible: true, message: t('share_unavailable') || 'Paylaşım şu anda kullanılamıyor', type: 'error' });
     }
+  };
+
+  const openRewardFallback = (fn) => {
+    rewardActionRef.current = fn;
+    setRewardVisible(true);
+  };
+
+  const proceedAfterFallback = async () => {
+    const fn = rewardActionRef.current;
+    rewardActionRef.current = null;
+    setRewardVisible(false);
+    let res = undefined;
+    if (fn) res = await fn();
+    const resolve = rewardResolveRef.current;
+    rewardResolveRef.current = null;
+    if (resolve) resolve(res);
+  };
+
+  const runMonetizedGate = async (fn) => {
+    if (premium) {
+      await fn();
+      return;
+    }
+    if (isWeb) {
+      const r = await new Promise((resolve) => { rewardResolveRef.current = resolve; openRewardFallback(fn); });
+      return r;
+    }
+    let mod = null;
+    try { mod = await import('react-native-google-mobile-ads'); } catch {}
+    if (!mod) { const r = await new Promise((resolve) => { rewardResolveRef.current = resolve; openRewardFallback(fn); }); return r; }
+    try {
+      const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType, TestIds } = mod;
+      const tryRewardedInterstitial = async () => {
+        const unitId = TestIds?.REWARDED_INTERSTITIAL || 'ca-app-pub-3940256099942544/5354046379';
+        const ad = RewardedInterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
+        await new Promise((resolve, reject) => {
+          let earned = false;
+          const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+          const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+          const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+          const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+          const cleanup = () => { ul(); ue(); uc(); ur(); };
+          ad.load();
+        });
+      };
+      const tryRewarded = async () => {
+        const unitId = TestIds?.REWARDED || 'ca-app-pub-3940256099942544/5224354917';
+        const ad = RewardedAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
+        await new Promise((resolve, reject) => {
+          let earned = false;
+          const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+          const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+          const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+          const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+          const cleanup = () => { ul(); ue(); uc(); ur(); };
+          ad.load();
+        });
+      };
+      const tryInterstitial = async () => {
+        const unitId = TestIds?.INTERSTITIAL || 'ca-app-pub-3940256099942544/1033173712';
+        const ad = InterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
+        await new Promise((resolve, reject) => {
+          const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+          const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+          const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); resolve(true); });
+          const cleanup = () => { ul(); ue(); uc(); };
+          ad.load();
+        });
+      };
+      let ok = false;
+      try { await tryRewardedInterstitial(); ok = true; } catch {}
+      if (!ok) { try { await tryRewarded(); ok = true; } catch {} }
+      if (!ok) { try { await tryInterstitial(); ok = true; } catch {} }
+      if (!ok) throw new Error('no_ad');
+      const r = await fn();
+      return r;
+    } catch {
+      const r = await new Promise((resolve) => { rewardResolveRef.current = resolve; openRewardFallback(fn); });
+      return r;
+    }
+  };
+
+  const onDownload = async () => {
+    if (!matrix) return;
+    const ok = await runMonetizedGate(performDownload);
+    if (ok) {
+      setInfoMessage(t('saved_to_gallery') || 'Galeriye kaydedildi');
+      setInfoVisible(true);
+    }
+  };
+
+  const onShare = async () => {
+    await runMonetizedGate(performShare);
   };
 
   return (
@@ -330,6 +471,53 @@ export default function CreateQrScreen() {
           {t('info_text') || 'QR kodları URL, metin, telefon numarası, e-posta adresi ve daha fazlasını içerebilir. Maksimum 2.953 karakter desteklenir.'}
         </Text>
       </View>
+      <AdvancedAdCard placement="create" />
+      <Modal visible={rewardVisible} transparent animationType="fade">
+        <View style={styles.rewardOverlay}>
+          <View style={[styles.rewardCard, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
+            <View style={styles.rewardHeader}>
+              <Ionicons name="gift-outline" size={22} color={dark ? '#e6edf3' : '#0b1220'} />
+              <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>Reklam Destekli Devam</Text>
+            </View>
+            <Text style={[styles.rewardSubtitle, { color: dark ? '#8b98a5' : '#57606a' }]}>Kısa bir sponsorlu içerik sonrası devam edebilirsin.</Text>
+            <AdvancedAdCard placement="create_reward" />
+            <AdBanner placement="create_reward" variant="mrec" />
+            <TouchableOpacity 
+              style={[styles.rewardCta, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', opacity: rewardCountdown > 0 ? 0.6 : 1 }]}
+              onPress={proceedAfterFallback}
+              disabled={rewardCountdown > 0}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.rewardCtaText}>{rewardCountdown > 0 ? `Devam et (${rewardCountdown}s)` : 'Devam et'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.premiumBtn, { backgroundColor: dark ? '#1b2330' : '#f0f4f8', borderColor: dark ? '#243044' : '#dbe2ea' }]}
+              onPress={() => { setRewardVisible(false); navigation.navigate('Settings'); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.premiumText, { color: dark ? '#4a9eff' : '#0066cc' }]}>Reklamsız Premium</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={infoVisible} transparent animationType="fade">
+        <View style={styles.rewardOverlay}>
+          <View style={[styles.infoCard, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
+            <View style={styles.rewardHeader}>
+              <Ionicons name="checkmark-circle-outline" size={22} color={dark ? '#7ee787' : '#2da44e'} />
+              <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('download') || 'İndir'}</Text>
+            </View>
+            <Text style={[styles.rewardSubtitle, { color: dark ? '#8b98a5' : '#57606a' }]}>{infoMessage}</Text>
+            <TouchableOpacity 
+              style={[styles.okBtn, { backgroundColor: dark ? '#1b2330' : '#f0f4f8', borderColor: dark ? '#243044' : '#dbe2ea' }]}
+              onPress={() => setInfoVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.okText, { color: dark ? '#e6edf3' : '#0b1220' }]}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <Toast 
         visible={toast.visible} 
         message={toast.message}
@@ -496,4 +684,69 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  rewardOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20
+  },
+  rewardCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12
+  },
+  rewardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  rewardTitle: {
+    fontSize: 18,
+    fontWeight: '700'
+  },
+  rewardSubtitle: {
+    fontSize: 13
+  },
+  rewardCta: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  rewardCtaText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15
+  },
+  premiumBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center'
+  },
+  premiumText: {
+    fontWeight: '700'
+  },
+  infoCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12
+  },
+  okBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center'
+  },
+  okText: {
+    fontWeight: '700'
+  }
 });

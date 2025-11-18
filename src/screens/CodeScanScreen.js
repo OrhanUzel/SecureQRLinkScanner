@@ -11,6 +11,7 @@ import { classifyInput } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
+import AdvancedAdCard from '../components/AdvancedAdCard';
 
 export default function CodeScanScreen({ navigation }) {
   const { t } = useTranslation();
@@ -310,9 +311,7 @@ export default function CodeScanScreen({ navigation }) {
         </Animated.View>
       )}
       {result && !showCamera && (
-        <View style={{ paddingHorizontal: 20 }}>
-          <AdBanner placement="code" />
-        </View>
+        <AdvancedAdCard placement="code" />
       )}
     </View>
   );
