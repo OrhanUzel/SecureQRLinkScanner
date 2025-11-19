@@ -8,6 +8,7 @@ export default function AdvancedAdCard({ placement }) {
   const { dark } = useAppTheme();
   const [premium, setPremium] = useState(false);
   const [nativeMod, setNativeMod] = useState(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -31,7 +32,7 @@ export default function AdvancedAdCard({ placement }) {
 
   if (premium) return null;
 
-  if (!nativeMod) {
+  if (!nativeMod || failed) {
     return <AdBanner placement={placement} variant="mrec" />;
   }
 
@@ -49,11 +50,13 @@ export default function AdvancedAdCard({ placement }) {
     return <AdBanner placement={placement} variant="mrec" />;
   }
 
-  const testUnit = nativeMod?.TestIds?.NATIVE_ADVANCED || 'ca-app-pub-3940256099942544/2247696110';
+  const nativeUnitId = 'ca-app-pub-2533405439201612/9020550443';
 
   return (
     <NativeAdView
-      adUnitID={testUnit}
+      adUnitID={nativeUnitId}
+      onAdFailedToLoad={() => setFailed(true)}
+      onAdLoaded={() => setFailed(false)}
       style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
     >
       <View style={styles.rowTop}>

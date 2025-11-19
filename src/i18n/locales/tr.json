@@ -1,5 +1,5 @@
 {
-  "app.title": "Secure QR Link Scanner",
+  "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Tarama Türünü Seç",
   "scan.select.subtitle": "Ne taramak istediğini seç ve güvenli analiz başlat.",
   "scan.link": "Link",
@@ -90,5 +90,10 @@
   "remoteRisk.sourcesLabel": "Kaynaklar:",
   "label.url": "URL",
   "label.content": "İçerik",
-  "scan.guide.align": "QR kodu veya barkodu çerçeve içine hizalayın"
+  "scan.guide.align": "QR kodu veya barkodu çerçeve içine hizalayın",
+  "confirm.openTitle": "Linki açmadan önce",
+  "confirm.openMessage": "Bu linki açmak istediğinizden emin misiniz?",
+  "confirm.yes": "Evet",
+  "confirm.no": "Hayır",
+  "toast.copied": "Panoya kopyalandı"
 }

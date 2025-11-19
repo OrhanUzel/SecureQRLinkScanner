@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage } from '../i18n';
@@ -11,6 +11,8 @@ import AdvancedAdCard from '../components/AdvancedAdCard';
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { dark, theme, setTheme } = useAppTheme();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360 || height < 640;
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
   const [consentInfo, setConsentInfo] = useState(null);
@@ -26,6 +28,9 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     (async () => {
+      if (Platform.OS !== 'ios') {
+        return;
+      }
       try {
         const mod = await import('react-native-iap');
         setIap(mod);
@@ -127,7 +132,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
@@ -147,12 +152,13 @@ export default function SettingsScreen() {
             {t('language.select')}
           </Text>
         </View>
-        <View style={styles.optionsContainer}>
+        <View style={[styles.optionsContainer, compact ? { gap: 8 } : null]}>
           {languages.map(lng => (
             <TouchableOpacity 
               key={lng.code} 
               style={[
                 styles.languageCard, 
+                compact ? { width: '100%', padding: 12 } : null,
                 { 
                   backgroundColor: i18n.language === lng.code 
                     ? (dark ? '#1a4d8f' : '#e3f2fd')
@@ -205,12 +211,13 @@ export default function SettingsScreen() {
             {t('settings.theme')}
           </Text>
         </View>
-        <View style={styles.themeContainer}>
+        <View style={[styles.themeContainer, compact ? { gap: 8 } : null]}>
           {themes.map(th => (
             <TouchableOpacity 
               key={th.value} 
               style={[
                 styles.themeCard, 
+                compact ? { padding: 14, minWidth: 120 } : null,
                 { 
                   backgroundColor: theme === th.value 
                     ? (dark ? '#1a4d2e' : '#e8f5e9')

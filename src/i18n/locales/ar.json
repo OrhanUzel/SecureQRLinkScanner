@@ -1,5 +1,5 @@
 {
-  "app.title": "Secure QR Link Scanner",
+  "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "اختر نوع المسح",
   "scan.select.subtitle": "اختر ما تريد مسحه وابدأ تحليلًا آمنًا.",
   "scan.link": "رابط",
@@ -78,5 +78,10 @@
   "download_unavailable_detail": "يتطلب حفظ الصورة وحدة إضافية. يعمل على الويب؛ على الأنظمة الأصلية يمكننا إضافة دعم SVG/وحدة إضافية.",
   "share_unavailable": "المشاركة غير متاحة حاليًا",
   "saved_to_gallery": "تم الحفظ في المعرض",
-  "permission_required_media": "يلزم إذن الوصول إلى الوسائط"
+  "permission_required_media": "يلزم إذن الوصول إلى الوسائط",
+  "confirm.openTitle": "قبل فتح الرابط",
+  "confirm.openMessage": "هل أنت متأكد أنك تريد فتح هذا الرابط؟",
+  "confirm.yes": "نعم",
+  "confirm.no": "لا",
+  "toast.copied": "تم النسخ إلى الحافظة"
 }

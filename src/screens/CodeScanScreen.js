@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Animated, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
@@ -12,10 +13,14 @@ import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
 import AdvancedAdCard from '../components/AdvancedAdCard';
+import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
+import Toast from '../components/Toast';
 
 export default function CodeScanScreen({ navigation }) {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360 || height < 640;
   const isFocused = useIsFocused();
   const cameraRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -29,6 +34,10 @@ export default function CodeScanScreen({ navigation }) {
   const [showCamera, setShowCamera] = useState(true);
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
   // Her girişte (ekran odaklandığında) izni tekrar iste.
   // Android OS izin ekranını otomatik tetikler (canAskAgain=true ise).
@@ -114,7 +123,9 @@ export default function CodeScanScreen({ navigation }) {
 
   const openLink = () => {
     if (!result?.normalized) return;
-    if (result.normalized.startsWith('http')) Linking.openURL(result.normalized);
+    const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized;
+    setPendingUrl(raw);
+    setConfirmVisible(true);
   };
 
   const shareText = async () => {
@@ -162,7 +173,7 @@ export default function CodeScanScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}>
       {offline && (
         <View style={styles.offlineBar}>
           <Ionicons name="wifi" size={18} color={'#cf222e'} />
@@ -228,21 +239,22 @@ export default function CodeScanScreen({ navigation }) {
             }
           ]}
         >
-          <View style={styles.resultHeader}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ paddingBottom: 24 }, compact ? { paddingHorizontal: 12 } : { paddingHorizontal: 20 }]}>
+          <View style={[styles.resultHeader, compact ? { marginBottom: 16, gap: 12 } : null]}>
             <Ionicons 
               name={result.level === 'secure' ? 'shield-checkmark' : result.level === 'suspicious' ? 'warning' : 'shield'} 
-              size={48} 
+              size={compact ? 40 : 48} 
               color={result.level === 'secure' ? '#2f9e44' : result.level === 'suspicious' ? '#ffb703' : '#d00000'} 
             />
             <RiskBadge level={result.level} />
           </View>
 
-          <View style={[styles.resultCard, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#e5e9f0' }]}> 
+          <View style={[styles.resultCard, compact ? { padding: 14, gap: 14 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#e5e9f0' }]}> 
             <View style={styles.resultSection}>
               <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
                 {result.isUrl ? t('label.url') : t('label.content')}
               </Text>
-              <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0066cc' }]} numberOfLines={3}>
+              <Text style={[styles.linkText, compact ? { fontSize: 14, lineHeight: 22 } : null, { color: dark ? '#9ecaff' : '#0066cc' }]} numberOfLines={3} selectable>
                 {result.normalized}
               </Text>
             </View>
@@ -277,21 +289,49 @@ export default function CodeScanScreen({ navigation }) {
             )}
           </View>
 
-          <View style={styles.buttonGroup}>
+          <View style={[styles.buttonGroup, compact ? { marginTop: 16 } : null]}>
             {result.isUrl && (
-              <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={openLink}>
+              <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.primaryBtn]} onPress={openLink}>
                 <Ionicons name="open-outline" size={22} color="#fff" />
                 <Text style={styles.actionBtnText}>{t('actions.openLink') || 'Linki Aç'}</Text>
               </TouchableOpacity>
             )}
+            {result?.normalized && (
+              <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.copyBtn]} onPress={async () => {
+                try { await Clipboard.setStringAsync(result.normalized); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {}
+              }}>
+                <Ionicons name="copy" size={22} color="#fff" />
+                <Text style={styles.actionBtnText}>{t('actions.copy') || 'Kopyala'}</Text>
+              </TouchableOpacity>
+            )}
             
-            <TouchableOpacity style={[styles.actionBtn, styles.secondaryBtn]} onPress={shareText}>
+            <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.secondaryBtn]} onPress={shareText}>
               <Ionicons name="share-outline" size={22} color="#fff" />
               <Text style={styles.actionBtnText}>{t('actions.share') || 'Paylaş'}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.vtBtn]} onPress={() => {
+              try {
+                const raw = result?.normalized || '';
+                const fixed = raw.startsWith('http') ? raw : 'https://' + raw;
+                const u = new URL(fixed);
+                const domain = u.hostname;
+                const vt = 'https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain);
+                setPendingUrl(vt);
+                setConfirmVisible(true);
+              } catch {
+                const raw = result?.normalized || '';
+                const domain = raw.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+                const vt = 'https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain);
+                setPendingUrl(vt);
+                setConfirmVisible(true);
+              }
+            }}>
+              <Ionicons name="search-outline" size={22} color="#fff" />
+              <Text style={styles.actionBtnText}>VirusTotal</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.bottomActions}>
+          <View style={[styles.bottomActions, compact ? { marginTop: 12 } : null]}>
             <TouchableOpacity style={[styles.bottomBtn, { backgroundColor: dark ? '#1b2330' : '#e5e9f0' }]} onPress={resetScan}>
               <Ionicons name="scan-outline" size={20} color={dark ? '#e6edf3' : '#0b1220'} />
               <Text style={[styles.bottomBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
@@ -308,11 +348,24 @@ export default function CodeScanScreen({ navigation }) {
               </TouchableOpacity>
             )}
           </View>
+          </ScrollView>
         </Animated.View>
       )}
       {result && !showCamera && (
-        <AdvancedAdCard placement="code" />
+        
+        <AdBanner placement="code" />
       )}
+      <ConfirmOpenLinkModal
+        visible={confirmVisible}
+        url={pendingUrl}
+        onConfirm={async () => {
+          setConfirmVisible(false);
+          if (pendingUrl) { try { await Linking.openURL(pendingUrl); } catch {} }
+          setPendingUrl(null);
+        }}
+        onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
+      />
+      <Toast visible={toastVisible} message={toastMsg} onHide={() => setToastVisible(false)} dark={dark} />
     </View>
   );
 }
@@ -672,8 +725,14 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: '#2f9e44',
   },
+  copyBtn: {
+    backgroundColor: '#0969da',
+  },
   secondaryBtn: {
     backgroundColor: '#6c5ce7',
+  },
+  vtBtn: {
+    backgroundColor: '#8250df',
   },
   actionBtnText: { 
     color: '#fff', 

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, FlatList, Platform, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,8 @@ import AdBanner from '../components/AdBanner';
 export default function ScanSelectScreen({ navigation }) {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360 || height < 640;
 
   const scanOptions = [
     {
@@ -79,6 +81,60 @@ export default function ScanSelectScreen({ navigation }) {
     }
   );
 
+  const ADS = {
+    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
+    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
+    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+  };
+
+  const runHistoryGate = async () => {
+    if (Platform.OS === 'web') {
+      return true;
+    }
+    let mod = null;
+    try { mod = await import('react-native-google-mobile-ads'); } catch {}
+    if (!mod) return true;
+    const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
+    const tryRewardedInterstitial = async () => {
+      const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        let earned = false;
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const cleanup = () => { ul(); ue(); uc(); ur(); };
+        ad.load();
+      });
+    };
+    const tryRewarded = async () => {
+      const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        let earned = false;
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const cleanup = () => { ul(); ue(); uc(); ur(); };
+        ad.load();
+      });
+    };
+    const tryInterstitial = async () => {
+      const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); resolve(true); });
+        const cleanup = () => { ul(); ue(); uc(); };
+        ad.load();
+      });
+    };
+    try { await tryRewardedInterstitial(); return true; } catch {}
+    try { await tryRewarded(); return true; } catch {}
+    try { await tryInterstitial(); return true; } catch {}
+    return true;
+  };
+
   return (
     <View 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
@@ -87,12 +143,12 @@ export default function ScanSelectScreen({ navigation }) {
       {/* Header removed per request */}
 
       {/* Scan Options Grid */}
-      <View style={styles.grid}>
+      <View style={[styles.grid, compact ? { paddingHorizontal: 8 } : null]}>
         <FlatList
           data={scanOptions}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          scrollEnabled={false}
+          numColumns={compact ? 1 : 2}
+          scrollEnabled={true}
           style={styles.gridList}
           contentContainerStyle={styles.gridContent}
           columnWrapperStyle={styles.gridRow}
@@ -100,10 +156,16 @@ export default function ScanSelectScreen({ navigation }) {
             <ScanCard
               option={item}
               dark={dark}
-              onPress={() => navigation.navigate(
-                item.route,
-                item.id === 'image' ? { autoPick: true } : undefined
-              )}
+              compact={compact}
+              onPress={async () => {
+                if (item.id === 'history') {
+                  try { await runHistoryGate(); } catch {}
+                }
+                navigation.navigate(
+                  item.route,
+                  item.id === 'image' ? { autoPick: true } : undefined
+                );
+              }}
               index={index}
             />
           )}
@@ -123,7 +185,7 @@ export default function ScanSelectScreen({ navigation }) {
   );
 }
 
-function ScanCard({ option, dark, onPress, index }) {
+function ScanCard({ option, dark, onPress, index, compact }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -143,7 +205,7 @@ function ScanCard({ option, dark, onPress, index }) {
   };
 
   return (
-    <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={[styles.cardWrapper, compact ? { width: '100%' } : { width: '48%' }, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
         activeOpacity={1}
         onPress={onPress}
@@ -152,7 +214,7 @@ function ScanCard({ option, dark, onPress, index }) {
         style={styles.touch}
         focusable={false}
       >
-        <View style={styles.cardShadow}>
+        <View style={[styles.cardShadow, compact ? { height: 160 } : { height: 190 }]}>
           <LinearGradient
             colors={option.colors}
             start={{ x: 0, y: 0 }}
@@ -162,12 +224,12 @@ function ScanCard({ option, dark, onPress, index }) {
             <View style={styles.cardContent}>
               
               <View style={styles.iconContainer}>
-                <Text style={styles.iconEmoji}>{option.emoji}</Text>
+                <Text style={[styles.iconEmoji, compact ? { fontSize: 30 } : null]}>{option.emoji}</Text>
               </View>
               
               <View style={styles.cardTextContainer}>
-                <Text style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
-                <Text style={styles.cardDescription} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
+                <Text style={[styles.cardTitle, compact ? { fontSize: 17 } : null]} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
+                <Text style={[styles.cardDescription, compact ? { fontSize: 12, lineHeight: 18 } : null]} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -287,9 +349,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16
   },
-  cardWrapper: {
-    width: '48%'
-  },
+  cardWrapper: {},
   touch: {
     borderRadius: 20,
   },

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, Modal, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -15,6 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 export default function CreateQrScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360 || height < 640;
   const navigation = useNavigation();
   const [input, setInput] = useState('');
   const [matrix, setMatrix] = useState(null);
@@ -32,6 +34,12 @@ export default function CreateQrScreen() {
   const rewardResolveRef = useRef(null);
   const [infoVisible, setInfoVisible] = useState(false);
   const [infoMessage, setInfoMessage] = useState('');
+
+  const ADS = {
+    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
+    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
+    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+  };
 
   const generateMatrix = useCallback(async (text) => {
     try {
@@ -234,9 +242,9 @@ export default function CreateQrScreen() {
     try { mod = await import('react-native-google-mobile-ads'); } catch {}
     if (!mod) { const r = await new Promise((resolve) => { rewardResolveRef.current = resolve; openRewardFallback(fn); }); return r; }
     try {
-      const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType, TestIds } = mod;
+      const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
       const tryRewardedInterstitial = async () => {
-        const unitId = TestIds?.REWARDED_INTERSTITIAL || 'ca-app-pub-3940256099942544/5354046379';
+        const unitId = ADS.REWARDED_INTERSTITIAL;
         const ad = RewardedInterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           let earned = false;
@@ -249,7 +257,7 @@ export default function CreateQrScreen() {
         });
       };
       const tryRewarded = async () => {
-        const unitId = TestIds?.REWARDED || 'ca-app-pub-3940256099942544/5224354917';
+        const unitId = ADS.REWARDED;
         const ad = RewardedAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           let earned = false;
@@ -262,7 +270,7 @@ export default function CreateQrScreen() {
         });
       };
       const tryInterstitial = async () => {
-        const unitId = TestIds?.INTERSTITIAL || 'ca-app-pub-3940256099942544/1033173712';
+        const unitId = ADS.INTERSTITIAL;
         const ad = InterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
@@ -301,17 +309,17 @@ export default function CreateQrScreen() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
       keyboardShouldPersistTaps="handled"
     >
       {/* Header */}
       <View style={styles.header}>
         <Ionicons 
           name="qr-code" 
-          size={32} 
+          size={compact ? 26 : 32} 
           color={dark ? '#4a9eff' : '#0066cc'} 
         />
-        <Text style={[styles.title, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+        <Text style={[styles.title, compact ? { fontSize: 20 } : null, { color: dark ? '#e6edf3' : '#0b1220' }]}>
           {t('qr_generator_title') || 'QR Kod Oluşturucu'}
         </Text>
       </View>
@@ -373,9 +381,9 @@ export default function CreateQrScreen() {
         </View>
 
         {/* Character Count */}
-        <Text style={[styles.charCount, { color: dark ? '#8b98a5' : '#7a8699' }]}>
-          {input.length} {t('characters') || 'karakter'}
-        </Text>
+          <Text style={[styles.charCount, compact ? { fontSize: 11 } : null, { color: dark ? '#8b98a5' : '#7a8699' }]}>
+            {input.length} {t('characters') || 'karakter'}
+          </Text>
       </View>
 
       {/* Error Message */}
@@ -390,7 +398,7 @@ export default function CreateQrScreen() {
 
       {/* Loading Indicator */}
       {isGenerating && (
-        <View style={styles.loadingContainer}>
+        <View style={[styles.loadingContainer, compact ? { paddingVertical: 24 } : null]}>
           <ActivityIndicator size="large" color={dark ? '#4a9eff' : '#0066cc'} />
           <Text style={[styles.loadingText, { color: dark ? '#b1bac4' : '#4a5568' }]}>
             {t('generating') || 'Oluşturuluyor...'}
@@ -400,7 +408,7 @@ export default function CreateQrScreen() {
 
       {/* QR Code Display */}
       {matrix && !isGenerating && (
-        <View style={styles.qrSection}>
+        <View style={[styles.qrSection, compact ? { gap: 12, marginVertical: 12 } : null]}>
           <ViewShot ref={qrRef} options={{ format: 'png', quality: 1 }}>
             <View style={[ styles.qrContainer, { backgroundColor: dark ? '#1b2330' : '#fff' } ]}>
               <View style={[styles.qrWrap, { width: qrSize, height: qrSize }]}>
@@ -423,23 +431,23 @@ export default function CreateQrScreen() {
           </ViewShot>
 
           {/* Action Buttons */}
-          <View style={styles.actionButtons}>
+          <View style={[styles.actionButtons, compact ? { gap: 8 } : null]}>
             <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: dark ? '#1b2330' : '#fff' }]}
+              style={[styles.actionButton, compact ? { paddingVertical: 10 } : null, { backgroundColor: dark ? '#1b2330' : '#fff' }]}
               onPress={onDownload}
             >
               <Ionicons name="download-outline" size={20} color={dark ? '#4a9eff' : '#0066cc'} />
-              <Text style={[styles.actionButtonText, { color: dark ? '#4a9eff' : '#0066cc' }]}>
+              <Text style={[styles.actionButtonText, compact ? { fontSize: 14 } : null, { color: dark ? '#4a9eff' : '#0066cc' }]}>
                 {t('download') || 'İndir'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: dark ? '#1b2330' : '#fff' }]}
+              style={[styles.actionButton, compact ? { paddingVertical: 10 } : null, { backgroundColor: dark ? '#1b2330' : '#fff' }]}
               onPress={onShare}
             >
               <Ionicons name="share-outline" size={20} color={dark ? '#4a9eff' : '#0066cc'} />
-              <Text style={[styles.actionButtonText, { color: dark ? '#4a9eff' : '#0066cc' }]}>
+              <Text style={[styles.actionButtonText, compact ? { fontSize: 14 } : null, { color: dark ? '#4a9eff' : '#0066cc' }]}>
                 {t('share') || 'Paylaş'}
               </Text>
             </TouchableOpacity>
@@ -449,11 +457,11 @@ export default function CreateQrScreen() {
 
       {/* Placeholder */}
       {!matrix && !isGenerating && !error && (
-        <View style={[styles.placeholder, { borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
+        <View style={[styles.placeholder, compact ? { padding: 24 } : null, { borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
           <View style={[styles.placeholderIcon, { backgroundColor: dark ? '#1b2330' : '#f0f4f8' }]}>
-            <Ionicons name="qr-code-outline" size={64} color={dark ? '#4a5568' : '#94a3b8'} />
+            <Ionicons name="qr-code-outline" size={compact ? 52 : 64} color={dark ? '#4a5568' : '#94a3b8'} />
           </View>
-          <Text style={[styles.placeholderTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+          <Text style={[styles.placeholderTitle, compact ? { fontSize: 16 } : null, { color: dark ? '#e6edf3' : '#0b1220' }]}>
             {t('placeholder_title') || 'QR Kod Oluşturun'}
           </Text>
           <Text style={[styles.placeholderText, { color: dark ? '#8b98a5' : '#7a8699' }]}>

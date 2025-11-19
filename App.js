@@ -100,7 +100,7 @@ function RootNavigator() {
 }
 
 export default function App() {
-  const [consented, setConsented] = useState(false);
+  const [consented, setConsented] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -111,11 +111,20 @@ export default function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const mod = await import('react-native-google-mobile-ads');
+        try { await mod?.mobileAds()?.initialize(); } catch {}
+      } catch {}
+    })();
+  }, []);
+
   return (
     <ThemeProvider>
       <RootNavigator />
-      <StatusBar style={consented ? 'auto' : 'light'} />
-      <ConsentModal visible={!consented} onAccept={async () => { await setConsent(); setConsented(true); }} />
+      <StatusBar style={consented === true ? 'auto' : 'light'} />
+      <ConsentModal visible={consented === false} onAccept={async () => { await setConsent(); setConsented(true); }} />
     </ThemeProvider>
   );
 }

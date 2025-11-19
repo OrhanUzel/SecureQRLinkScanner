@@ -1,5 +1,5 @@
 {
-  "app.title": "Secure QR Link Scanner",
+  "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Select Scan Type",
   "scan.select.subtitle": "Choose what to scan and start a secure analysis.",
   "scan.link": "Link",
@@ -89,5 +89,10 @@
   "remoteRisk.sourcesLabel": "Sources:",
   "label.url": "URL",
   "label.content": "Content",
-  "scan.guide.align": "Align the QR code or barcode within the frame"
+  "scan.guide.align": "Align the QR code or barcode within the frame",
+  "confirm.openTitle": "Before opening the link",
+  "confirm.openMessage": "Are you sure you want to open this link?",
+  "confirm.yes": "Yes",
+  "confirm.no": "No",
+  "toast.copied": "Copied to clipboard"
 }

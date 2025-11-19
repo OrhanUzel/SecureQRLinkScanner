@@ -1,5 +1,5 @@
 {
-  "app.title": "Secure QR Link Scanner",
+  "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Selecciona tipo de escaneo",
   "scan.select.subtitle": "Elige qué escanear y comienza un análisis seguro.",
   "scan.link": "Enlace",
@@ -86,5 +86,10 @@
   "remoteRisk.sourcesLabel": "Fuentes:",
   "label.url": "URL",
   "label.content": "Contenido",
-  "scan.guide.align": "Alinea el código QR o código de barras dentro del marco"
+  "scan.guide.align": "Alinea el código QR o código de barras dentro del marco",
+  "confirm.openTitle": "Antes de abrir el enlace",
+  "confirm.openMessage": "¿Seguro que quieres abrir este enlace?",
+  "confirm.yes": "Sí",
+  "confirm.no": "No",
+  "toast.copied": "Copiado al portapapeles"
 }

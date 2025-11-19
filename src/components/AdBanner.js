@@ -33,17 +33,17 @@ export default function AdBanner({ placement, variant }) {
 
   if (premium) return null;
 
-  const testUnit = admod?.TestIds?.BANNER || 'ca-app-pub-3940256099942544/6300978111';
+  const unitId = 'ca-app-pub-2533405439201612/1654246063';
 
   const useMrec = variant === 'mrec';
   const bannerSize = useMrec ? admod?.BannerAdSize?.MEDIUM_RECTANGLE : admod?.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER;
 
   return (
-    <View style={admod ? (useMrec ? styles.mrecWrap : styles.adWrap) : [styles.wrap, { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }] }>
+    <View style={admod ? [useMrec ? styles.mrecWrap : styles.adWrap, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }] : [styles.wrap, { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }] }>
       {admod ? (
         <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
           <admod.BannerAd
-            unitId={testUnit}
+            unitId={unitId}
             size={bannerSize}
             requestOptions={{ requestNonPersonalizedAdsOnly: true }}
           />

@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
 import AdvancedAdCard from '../components/AdvancedAdCard';
+import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
+import Toast from '../components/Toast';
 
 export default function LinkScanScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
+  const { width, height } = useWindowDimensions();
+  const compact = width < 360 || height < 640;
   const [input, setInput] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
  const onAnalyze = async () => {
   if (!input.trim()) return;
@@ -67,13 +76,10 @@ export default function LinkScanScreen() {
     setResult(null);
   };
 
-  const openLink = async () => {
+  const openLink = () => {
     if (result?.normalized && result.isUrl) {
-      try {
-        await Linking.openURL(result.normalized);
-      } catch (e) {
-        Alert.alert('Hata', e.message);
-      }
+      setPendingUrl(result.normalized);
+      setConfirmVisible(true);
     }
   };
 
@@ -89,12 +95,26 @@ export default function LinkScanScreen() {
         domain = result.normalized.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
       }
       const url = 'https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain);
-      Linking.openURL(url);
+      setPendingUrl(url);
+      setConfirmVisible(true);
+    }
+  };
+
+  const copyLink = async () => {
+    if (result?.normalized) {
+      try {
+        await Clipboard.setStringAsync(result.normalized);
+        setToastMsg(t('toast.copied'));
+        setToastVisible(true);
+      } catch {}
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}> 
+    <ScrollView style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb', padding: compact ? 12 : 20 }]}
+      contentContainerStyle={{ gap: 16 }}
+      keyboardShouldPersistTaps="handled"
+    > 
       {offline && (
         <View style={[styles.alertBar, { backgroundColor: dark ? 'rgba(207,34,46,0.15)' : 'rgba(207,34,46,0.1)', borderColor: dark ? 'rgba(207,34,46,0.3)' : 'rgba(207,34,46,0.25)' }]}> 
           <Ionicons name="wifi" size={18} color={dark ? '#ffb4b9' : '#cf222e'} />
@@ -129,7 +149,7 @@ export default function LinkScanScreen() {
       </View>
 
       <TouchableOpacity 
-        style={[styles.button, !input.trim() && styles.buttonDisabled]} 
+        style={[styles.button, compact ? { paddingVertical: 12 } : null, !input.trim() && styles.buttonDisabled]} 
         onPress={onAnalyze}
         disabled={!input.trim()}
         activeOpacity={0.8}
@@ -139,8 +159,8 @@ export default function LinkScanScreen() {
       </TouchableOpacity>
 
       {result && (
-        <View style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
-          <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0969da' }]} numberOfLines={2}>
+        <View style={[styles.card, compact ? { padding: 12 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
+          <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0969da' }]} numberOfLines={2} selectable>
             {result.normalized}
           </Text>
           <View style={styles.badgeRow}>
@@ -155,7 +175,7 @@ export default function LinkScanScreen() {
               ))}
             </View>
           )}
-          <View style={styles.actions}>
+          <View style={[styles.actions, compact ? { flexDirection: 'column' } : null]}>
             <TouchableOpacity 
               style={[styles.actionBtn, { backgroundColor: '#2da44e' }]} 
               onPress={openLink}
@@ -163,6 +183,14 @@ export default function LinkScanScreen() {
             >
               <Ionicons name="open-outline" size={18} color="#fff" />
               <Text style={styles.actionBtnText}>{t('actions.openLink')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionBtn, { backgroundColor: '#0969da' }]} 
+              onPress={copyLink}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="copy" size={18} color="#fff" />
+              <Text style={styles.actionBtnText}>{t('actions.copy')}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionBtn, { backgroundColor: '#8250df' }]} 
@@ -176,7 +204,26 @@ export default function LinkScanScreen() {
         </View>
       )}
       <AdvancedAdCard placement="link" />
-    </View>
+      <AdBanner placement="link" />
+      <ConfirmOpenLinkModal 
+        visible={confirmVisible}
+        url={pendingUrl}
+        onConfirm={async () => {
+          setConfirmVisible(false);
+          if (pendingUrl) {
+            try { await Linking.openURL(pendingUrl); } catch (e) { Alert.alert('Hata', e.message); }
+          }
+          setPendingUrl(null);
+        }}
+        onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
+      />
+      <Toast 
+        visible={toastVisible}
+        message={toastMsg}
+        onHide={() => setToastVisible(false)}
+        dark={dark}
+      />
+    </ScrollView>
   );
 }
 
