@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from './AdBanner';
 
-export default function AdvancedAdCard({ placement }) {
+export default function AdvancedAdCard({ placement, large = false }) {
   const { dark } = useAppTheme();
   const [premium, setPremium] = useState(false);
   const [nativeMod, setNativeMod] = useState(null);
@@ -52,12 +52,15 @@ export default function AdvancedAdCard({ placement }) {
 
   const nativeUnitId = 'ca-app-pub-2533405439201612/9020550443';
 
+  const mediaHeight = large ? 240 : 180;
+  const cardPadding = large ? 16 : 12;
+  const cardGap = large ? 12 : 10;
   return (
     <NativeAdView
       adUnitID={nativeUnitId}
       onAdFailedToLoad={() => setFailed(true)}
       onAdLoaded={() => setFailed(false)}
-      style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
+      style={[styles.card, { padding: cardPadding, gap: cardGap, backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
     >
       <View style={styles.rowTop}>
         <IconView style={styles.icon} />
@@ -68,7 +71,7 @@ export default function AdvancedAdCard({ placement }) {
         <AdBadge style={styles.badge} />
       </View>
 
-      <MediaView style={styles.media} />
+      <MediaView style={[styles.media, { height: mediaHeight }]} />
 
       <TaglineView style={[styles.tagline, { color: dark ? '#8b98a5' : '#57606a' }]} />
 
@@ -84,9 +87,7 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     borderRadius: 16,
-    padding: 12,
     marginTop: 12,
-    gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -121,7 +122,6 @@ const styles = StyleSheet.create({
   },
   media: {
     width: '100%',
-    height: 180,
     borderRadius: 12,
     backgroundColor: '#eef2f7'
   },

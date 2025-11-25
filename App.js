@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -21,6 +21,58 @@ const Stack = createNativeStackNavigator();
 
 function RootNavigator() {
   const { dark } = useAppTheme();
+
+  const ADS = {
+    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
+    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
+    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+  };
+
+  const runHistoryGate = async () => {
+    if (Platform.OS === 'web') return true;
+    let mod = null;
+    try { mod = await import('react-native-google-mobile-ads'); } catch {}
+    if (!mod) return true;
+    const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
+    const tryRewardedInterstitial = async () => {
+      const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        let earned = false;
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const cleanup = () => { ul(); ue(); uc(); ur(); };
+        ad.load();
+      });
+    };
+    const tryRewarded = async () => {
+      const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        let earned = false;
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const cleanup = () => { ul(); ue(); uc(); ur(); };
+        ad.load();
+      });
+    };
+    const tryInterstitial = async () => {
+      const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
+      await new Promise((resolve, reject) => {
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); resolve(true); });
+        const cleanup = () => { ul(); ue(); uc(); };
+        ad.load();
+      });
+    };
+    try { await tryRewardedInterstitial(); return true; } catch {}
+    try { await tryRewarded(); return true; } catch {}
+    try { await tryInterstitial(); return true; } catch {}
+    return true;
+  };
 
   const linking = {
     prefixes: ['app:///'],
@@ -47,7 +99,7 @@ function RootNavigator() {
 
             headerLeft: () => (
               <TouchableOpacity
-                onPress={() => navigation.navigate('History')}
+                onPress={async () => { try { await runHistoryGate(); } catch {} navigation.navigate('History'); }}
                 style={{
                   paddingHorizontal: 10,
                   paddingVertical: 6,

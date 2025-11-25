@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
 import AdvancedAdCard from '../components/AdvancedAdCard';
+import AdBanner from '../components/AdBanner';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
     loadSettings();
   }, []);
 
+  /*
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'ios') {
@@ -44,6 +46,7 @@ export default function SettingsScreen() {
       } catch {}
     })();
   }, []);
+  */
 
   const loadSettings = async () => {
     try {
@@ -87,6 +90,7 @@ export default function SettingsScreen() {
     navigation.navigate('Disclaimer');
   };
 
+  /*
   const onRemoveAds = async () => {
     try {
       if (iap) {
@@ -107,12 +111,15 @@ export default function SettingsScreen() {
       setPremium(true);
     } catch {}
   };
+  */
 
   const languages = [
-    { code: 'en', label: 'English', flag: '🇬🇧' },
+   
     { code: 'tr', label: 'Türkçe', flag: '🇹🇷' },
+    { code: 'ar', label: 'العربية', flag: '🇵🇸' },
     { code: 'es', label: 'Español', flag: '🇪🇸' },
-    { code: 'ar', label: 'العربية', flag: '🇸🇦' }
+    
+     { code: 'en', label: 'English', flag: '🇬🇧' }
   ];
 
   const themes = [
@@ -135,16 +142,92 @@ export default function SettingsScreen() {
       contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-          {t('settings.title')}
-        </Text>
-        <Text style={[styles.subtitle, { color: dark ? '#8b98a5' : '#5c6b7c' }]}>
-          {t('settings.subtitle')}
-        </Text>
+      <AdBanner placement="settings_top" />
+      
+ 
+      {/* Premium */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.premiumTitle')}</Text>
+        </View>
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: dark ? '#30363d' : '#e1e4e8',
+          backgroundColor: dark ? '#161b22' : '#ffffff'
+        }}>
+          <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
+            {t('settings.premiumDesc')}
+          </Text>
+          {!premium ? (
+            <TouchableOpacity 
+              style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
+              /* onPress={onRemoveAds} */
+              activeOpacity={0.8}
+            >
+              <Text style={styles.disclaimerIcon}>🚀</Text>
+              <Text style={styles.disclaimerText}>{t('settings.removeAds')}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ marginTop: 12 }}>
+              <Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>{t('settings.premiumActive')}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* Dil Seçimi */}
+      {/* Tema Seçimi */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🎨</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+            {t('settings.theme')}
+          </Text>
+        </View>
+        <View style={[styles.themeContainer, compact ? { gap: 8 } : null]}>
+          {themes.map(th => (
+            <TouchableOpacity 
+              key={th.value} 
+              style={[
+                styles.themeCard, 
+                compact ? { padding: 14, minWidth: 120 } : null,
+                { 
+                  backgroundColor: theme === th.value 
+                    ? (dark ? '#1a4d2e' : '#e8f5e9')
+                    : (dark ? '#161b22' : '#ffffff'),
+                  borderColor: theme === th.value 
+                    ? (dark ? '#4caf50' : '#4caf50')
+                    : (dark ? '#30363d' : '#e1e4e8'),
+                  borderWidth: theme === th.value ? 2 : 1
+                }
+              ]} 
+              onPress={() => onTheme(th.value)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.themeIcon}>{th.icon}</Text>
+              <Text style={[
+                styles.themeName, 
+                { 
+                  color: theme === th.value 
+                    ? (dark ? '#7ee787' : '#2da44e')
+                    : (dark ? '#c9d1d9' : '#24292f')
+                }
+              ]}>
+                {t(`settings.${th.value}`)}
+              </Text>
+              {theme === th.value && (
+                <View style={[styles.checkmark, { backgroundColor: dark ? '#7ee787' : '#2da44e' }]}>
+                  <Text style={styles.checkmarkText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+       {/* Dil Seçimi */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌍</Text>
@@ -203,87 +286,7 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Tema Seçimi */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🎨</Text>
-          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-            {t('settings.theme')}
-          </Text>
-        </View>
-        <View style={[styles.themeContainer, compact ? { gap: 8 } : null]}>
-          {themes.map(th => (
-            <TouchableOpacity 
-              key={th.value} 
-              style={[
-                styles.themeCard, 
-                compact ? { padding: 14, minWidth: 120 } : null,
-                { 
-                  backgroundColor: theme === th.value 
-                    ? (dark ? '#1a4d2e' : '#e8f5e9')
-                    : (dark ? '#161b22' : '#ffffff'),
-                  borderColor: theme === th.value 
-                    ? (dark ? '#4caf50' : '#4caf50')
-                    : (dark ? '#30363d' : '#e1e4e8'),
-                  borderWidth: theme === th.value ? 2 : 1
-                }
-              ]} 
-              onPress={() => onTheme(th.value)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.themeIcon}>{th.icon}</Text>
-              <Text style={[
-                styles.themeName, 
-                { 
-                  color: theme === th.value 
-                    ? (dark ? '#7ee787' : '#2da44e')
-                    : (dark ? '#c9d1d9' : '#24292f')
-                }
-              ]}>
-                {t(`settings.${th.value}`)}
-              </Text>
-              {theme === th.value && (
-                <View style={[styles.checkmark, { backgroundColor: dark ? '#7ee787' : '#2da44e' }]}>
-                  <Text style={styles.checkmarkText}>✓</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Premium */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
-          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>Premium</Text>
-        </View>
-        <View style={{
-          padding: 16,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: dark ? '#30363d' : '#e1e4e8',
-          backgroundColor: dark ? '#161b22' : '#ffffff'
-        }}>
-          <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
-            Reklamsız deneyime geçerek daha hızlı ve temiz arayüz kullanın.
-          </Text>
-          {!premium ? (
-            <TouchableOpacity 
-              style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
-              onPress={onRemoveAds}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.disclaimerIcon}>🚀</Text>
-              <Text style={styles.disclaimerText}>{processing ? 'İşlem yapılıyor...' : 'Reklamları kaldır'}</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ marginTop: 12 }}>
-              <Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>Premium aktif</Text>
-            </View>
-          )}
-        </View>
-      </View>
+     
 
       {/* Disclaimer Butonu */}
       <TouchableOpacity 

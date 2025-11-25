@@ -327,7 +327,7 @@ export default function CodeScanScreen({ navigation }) {
               }
             }}>
               <Ionicons name="search-outline" size={22} color="#fff" />
-              <Text style={styles.actionBtnText}>VirusTotal</Text>
+              <Text style={styles.actionBtnText}>{t('actions.analyzeVirusTotal') || 'VirusTotal'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -371,15 +371,26 @@ export default function CodeScanScreen({ navigation }) {
 }
 
 function RiskBadge({ level }) {
-  let color = '#2f9e44', text = 'Güvenli', icon = 'shield-checkmark';
-  if (level === 'suspicious') { color = '#ffb703'; text = 'Şüpheli'; icon = 'warning'; }
-  if (level === 'unsafe') { color = '#d00000'; text = 'Tehlikeli'; icon = 'alert-circle'; }
+  const { t } = useTranslation();
+  const scale = React.useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.06, duration: 800, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [scale]);
+
+  let color = '#2f9e44', text = t('result.secure'), icon = 'shield-checkmark';
+  if (level === 'suspicious') { color = '#ffb703'; text = t('result.suspicious'); icon = 'warning'; }
+  if (level === 'unsafe') { color = '#d00000'; text = t('result.unsafe'); icon = 'alert-circle'; }
   
   return (
-    <View style={[styles.badge, { backgroundColor: color }]}> 
-      <Ionicons name={icon} size={18} color="#fff" />
+    <Animated.View style={[styles.badge, { backgroundColor: color, alignSelf: 'center', transform: [{ scale }] }]}> 
+      <Ionicons name={icon} size={20} color="#fff" />
       <Text style={styles.badgeText}>{text}</Text>
-    </View>
+    </Animated.View>
   );
 }
 

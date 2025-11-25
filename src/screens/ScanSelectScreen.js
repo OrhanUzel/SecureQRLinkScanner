@@ -139,6 +139,8 @@ export default function ScanSelectScreen({ navigation }) {
     <View 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
     >
+
+      
       
       {/* Header removed per request */}
 
@@ -214,7 +216,7 @@ function ScanCard({ option, dark, onPress, index, compact }) {
         style={styles.touch}
         focusable={false}
       >
-        <View style={[styles.cardShadow, compact ? { height: 160 } : { height: 190 }]}>
+        <View style={[styles.cardShadow]}>
           <LinearGradient
             colors={option.colors}
             start={{ x: 0, y: 0 }}
@@ -224,12 +226,12 @@ function ScanCard({ option, dark, onPress, index, compact }) {
             <View style={styles.cardContent}>
               
               <View style={styles.iconContainer}>
-                <Text style={[styles.iconEmoji, compact ? { fontSize: 30 } : null]}>{option.emoji}</Text>
+                <Text style={[styles.iconEmoji, compact ? { fontSize: 44 } : null]}>{option.emoji}</Text>
               </View>
               
               <View style={styles.cardTextContainer}>
-                <Text style={[styles.cardTitle, compact ? { fontSize: 17 } : null]} numberOfLines={1} ellipsizeMode="tail">{option.title}</Text>
-                <Text style={[styles.cardDescription, compact ? { fontSize: 12, lineHeight: 18 } : null]} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text>
+                <Text style={[styles.cardTitle, compact ? { fontSize: 17 } : null]} numberOfLines={2}>{option.title}</Text>
+                {/* <Text style={[styles.cardDescription, compact ? { fontSize: 12, lineHeight: 18 } : null]} numberOfLines={2} ellipsizeMode="tail">{option.description}</Text> */}
               </View>
             </View>
           </LinearGradient>
@@ -373,16 +375,16 @@ const styles = StyleSheet.create({
   },
   
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
+    width: 96,
+    height: 96,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
     alignSelf: 'center'
   },
   iconEmoji: {
-    fontSize: 36
+    fontSize: 52
   },
   cardTextContainer: {
     gap: 4,

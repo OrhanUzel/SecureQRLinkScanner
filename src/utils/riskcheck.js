@@ -9,8 +9,7 @@ import Constants from 'expo-constants';
 const envBase = (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_API_BASE_URL)
   || (Constants?.expoConfig?.extra?.apiBaseUrl)
   || (Constants?.manifest?.extra?.apiBaseUrl);
-export const BASE_URL = envBase
-  || (Platform.OS === 'web' ? 'http://localhost:5000' : 'http://192.168.1.6:5000');
+export const BASE_URL = envBase ? String(envBase) : null;
 
 // Dev-only logger
 const log = (...args) => {
@@ -36,6 +35,15 @@ log('BASE_URL', BASE_URL);
  * @returns {Promise<RiskCheckResponse>}
  */
 export async function checkRisk(url) {
+  if (!BASE_URL) {
+    return {
+      isRisky: false,
+      message: '',
+      checkedDomain: '',
+      foundInFiles: [],
+      error: 'missing_base_url'
+    };
+  }
   const endpoint = `${BASE_URL}/api/riskcheck?url=${encodeURIComponent(url)}`;
   const t0 = Date.now();
   log('Request start', { platform: Platform.OS, endpoint, url });

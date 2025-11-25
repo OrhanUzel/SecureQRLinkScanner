@@ -1,10 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Optional imports guarded at runtime to avoid breaking tests/web
-let ExpoAsset;
-let ExpoFileSystem;
-try { ExpoAsset = require('expo-asset').Asset; } catch {}
-try { ExpoFileSystem = require('expo-file-system'); } catch {}
+import { checkRisk } from './riskcheck';
 
 // Configuration
 const SUS_KEYWORDS = [
@@ -47,9 +42,7 @@ const MULTI_PART_TLDS = [
   'co.in', 'com.mx', 'co.nz', 'com.ar', 'co.id', 'com.sg'
 ];
 
-// Scoring weights (can be adjusted for sensitivity)
 const SCORE_WEIGHTS = {
-  blacklist: 10,      // Auto unsafe
   http: 2,
   homoglyph: 2,
   userinfo: 3,
@@ -117,159 +110,7 @@ function normalizeHost(host) {
   return lower.startsWith('www.') ? lower.slice(4) : lower;
 }
 
-// ------------------------
-// Blacklist Management
-// ------------------------
-
-let BLACKLIST_SET = null;
-let BLACKLIST_LOADING = false;
-let BLACKLIST_PROMISE = null;
-
-function parseListToSet(items) {
-  try {
-    const lines = Array.isArray(items)
-      ? items.map(s => String(s))
-      : String(items)
-          .split(/\r?\n/)
-          .filter(Boolean);
-    
-    const normalized = lines
-      .map(s => s.trim().toLowerCase())
-      .filter(s => s && !s.startsWith('#'))
-      .map(s => s.replace(/^https?:\/\//i, ''))
-      .map(s => normalizeHost(s))
-      .map(s => s.split('/')[0]);
-    
-    return new Set(normalized);
-  } catch (err) {
-    console.error('[Classifier] Error parsing blacklist:', err);
-    return new Set();
-  }
-}
-
-export async function loadBlacklist() {
-  // Return cached if already loaded
-  if (BLACKLIST_SET) return BLACKLIST_SET;
-  
-  // Return existing promise if already loading
-  if (BLACKLIST_LOADING && BLACKLIST_PROMISE) {
-    return BLACKLIST_PROMISE;
-  }
-
-  BLACKLIST_LOADING = true;
-  BLACKLIST_PROMISE = (async () => {
-    const merged = new Set();
-
-    // Load from bundled TXT via Expo Asset (native/dev build)
-    try {
-      if (ExpoAsset) {
-        const mod = require('../data/blacklist.txt');
-        const asset = ExpoAsset.fromModule(mod);
-        
-        if (typeof asset.downloadAsync === 'function') {
-          try {
-            await asset.downloadAsync();
-          } catch (err) {
-            console.error('[Classifier] Asset download failed:', err);
-          }
-        }
-        
-        const uri = asset.localUri || asset.uri;
-        let content = '';
-        
-        // Try fetch first (works for both web and native)
-        if (typeof fetch === 'function') {
-          try {
-            const resp = await fetch(uri);
-            if (resp && resp.ok) {
-              content = await resp.text();
-            }
-          } catch (fetchErr) {
-            console.error('[Classifier] Fetch failed, trying FileSystem:', fetchErr);
-            
-            // Fallback to legacy FileSystem if fetch fails
-            if (ExpoFileSystem) {
-              try {
-                // Try new API first
-                if (typeof ExpoFileSystem.readAsString === 'function') {
-                  content = await ExpoFileSystem.readAsString(uri);
-                } else {
-                  // Use legacy API
-                  const legacy = require('expo-file-system/legacy');
-                  if (legacy && typeof legacy.readAsStringAsync === 'function') {
-                    content = await legacy.readAsStringAsync(uri);
-                  }
-                }
-              } catch (fsErr) {
-                console.error('[Classifier] FileSystem read failed:', fsErr);
-              }
-            }
-          }
-        }
-        
-        if (content) {
-          const fromTxt = parseListToSet(content);
-          for (const d of fromTxt) merged.add(d);
-        }
-      }
-    } catch (err) {
-      console.error('[Classifier] Native blacklist load failed:', err);
-    }
-
-    // Web fallback: try multiple paths
-    if (merged.size === 0 && typeof window !== 'undefined' && typeof fetch === 'function') {
-      const paths = [
-        '/src/data/blacklist.txt',
-        '/data/blacklist.txt',
-        '/assets/blacklist.txt',
-        './blacklist.txt'
-      ];
-      
-      for (const path of paths) {
-        try {
-          const resp = await fetch(path);
-          if (resp && resp.ok) {
-            const content = await resp.text();
-            const fromTxt = parseListToSet(content);
-            for (const d of fromTxt) merged.add(d);
-            console.log(`[Classifier] Loaded blacklist from ${path}`);
-            break;
-          }
-        } catch (err) {
-          // Try next path
-          continue;
-        }
-      }
-      
-      if (merged.size === 0) {
-        console.warn('[Classifier] Could not load blacklist from any path');
-      }
-    }
-
-    BLACKLIST_SET = merged;
-    console.log(`[Classifier] Blacklist loaded: ${merged.size} domains`);
-    return BLACKLIST_SET;
-  })();
-
-  return BLACKLIST_PROMISE;
-}
-
-function isBlacklisted(host) {
-  if (!host || !BLACKLIST_SET || BLACKLIST_SET.size === 0) return false;
-  
-  try {
-    const normalized = normalizeHost(host.toLowerCase());
-    const base = getBaseDomain(normalized);
-    
-    // Check exact match, normalized, and base domain
-    return BLACKLIST_SET.has(host.toLowerCase()) || 
-           BLACKLIST_SET.has(normalized) || 
-           BLACKLIST_SET.has(base);
-  } catch (err) {
-    console.error('[Classifier] Blacklist check error:', err);
-    return false;
-  }
-}
+// (Blacklist functionality removed)
 
 // ------------------------
 // Classification Logic
@@ -283,12 +124,7 @@ async function classifyURL(urlString, u) {
   const reasons = [];
   let score = 0;
 
-  // 1. Blacklist check devre dışı: yükleme beklenmiyor
-  // await loadBlacklist();
-  if (isBlacklisted(host)) {
-    reasons.push('classifier.blacklistWarning');
-    score += SCORE_WEIGHTS.blacklist;
-  }
+  
 
   // 2. HTTP vs HTTPS
   if (u.protocol === 'http:') {
@@ -396,6 +232,15 @@ async function classifyURL(urlString, u) {
     }
   }
 
+  // Remote API risk check
+  try {
+    const rc = await checkRisk(urlString);
+    if (rc && rc.isRisky) {
+      reasons.push('classifier.blacklistWarning');
+      if (score < THRESHOLDS.unsafe) score = THRESHOLDS.unsafe;
+    }
+  } catch {}
+
   // Determine threat level
   let level = 'secure';
   if (score >= THRESHOLDS.unsafe) {
@@ -449,11 +294,7 @@ export function classifyInput(input) {
     const reasons = [];
     let score = 0;
     
-    // Quick blacklist check (if already loaded)
-    if (BLACKLIST_SET && isBlacklisted(host)) {
-      reasons.push('classifier.blacklistWarning');
-      score += SCORE_WEIGHTS.blacklist;
-    }
+    
     
     // Run other checks synchronously
     if (u.protocol === 'http:') {
@@ -553,10 +394,15 @@ export function classifyInput(input) {
     return { normalized, isUrl: true, level, reasons, score };
     
   } catch (e) {
-    // Not a URL: txt-based classification disabled
-    const level = 'secure';
+    const lowerText = normalized.toLowerCase();
     const reasons = [];
-    const score = 0;
+    let score = 0;
+    const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
+    if (foundKeywords.length > 0) {
+      reasons.push('classifier.keywordWarning');
+      score += Math.min(foundKeywords.length, 3);
+    }
+    const level = score >= 1 ? 'suspicious' : 'secure';
     saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
     return { normalized, isUrl: false, level, reasons, score };
   }
@@ -585,10 +431,15 @@ export async function classifyInputAsync(input) {
     return { normalized, isUrl: true, level, reasons, score };
     
   } catch (e) {
-    // Not a URL: txt-based classification disabled
-    const level = 'secure';
+    const lowerText = normalized.toLowerCase();
     const reasons = [];
-    const score = 0;
+    let score = 0;
+    const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
+    if (foundKeywords.length > 0) {
+      reasons.push('classifier.keywordWarning');
+      score += Math.min(foundKeywords.length, 3);
+    }
+    const level = score >= 1 ? 'suspicious' : 'secure';
     saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
     return { normalized, isUrl: false, level, reasons, score };
   }

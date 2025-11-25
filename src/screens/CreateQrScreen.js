@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, Modal, useWindowDimensions, Keyboard } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -51,6 +51,7 @@ export default function CreateQrScreen() {
 
       setIsGenerating(true);
       setError(null);
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       const { QRCodeWriter, BarcodeFormat, EncodeHintType } = await import('@zxing/library');
       const writer = new QRCodeWriter();
@@ -82,13 +83,11 @@ export default function CreateQrScreen() {
     }
   }, [t]);
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      generateMatrix(input);
-    }, 300); // Debounce for better performance
-
-    return () => clearTimeout(timeoutId);
-  }, [input, generateMatrix]);
+  const onGenerate = async () => {
+    if (!input.trim()) { setMatrix(null); setError(null); return; }
+    Keyboard.dismiss();
+    await generateMatrix(input);
+  };
 
   useEffect(() => {
     (async () => {
@@ -384,6 +383,18 @@ export default function CreateQrScreen() {
           <Text style={[styles.charCount, compact ? { fontSize: 11 } : null, { color: dark ? '#8b98a5' : '#7a8699' }]}>
             {input.length} {t('characters') || 'karakter'}
           </Text>
+          <View style={[styles.generateRow, compact ? { marginTop: 8 } : null]}>
+            <TouchableOpacity 
+              style={[styles.generateBtn]}
+              onPress={onGenerate}
+              disabled={isGenerating || !input.trim()}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="flash-outline" size={20} color="#fff" />
+              <Text style={styles.generateText}>{t('actions.generate') || 'QR Oluştur'}</Text>
+            </TouchableOpacity>
+          </View>
+          <AdBanner placement="create_generate_under" />
       </View>
 
       {/* Error Message */}
@@ -590,6 +601,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     textAlign: 'right',
+  },
+  generateRow: {
+    marginTop: 10,
+    alignItems: 'stretch'
+  },
+  generateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#2f9e44',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  generateText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700'
   },
   errorContainer: {
     flexDirection: 'row',
