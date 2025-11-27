@@ -180,6 +180,7 @@ export default function CodeScanScreen({ navigation }) {
           <Text style={styles.offlineText}>{t('alerts.offline')}</Text>
         </View>
       )}
+      <AdBanner placement="code_top" variant="banner" />
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={'#9ecaff'} />
@@ -351,10 +352,9 @@ export default function CodeScanScreen({ navigation }) {
           </ScrollView>
         </Animated.View>
       )}
-      {result && !showCamera && (
-        
-        <AdBanner placement="code" />
-      )}
+      <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
+        <AdBanner placement="global_footer" />
+      </View>
       <ConfirmOpenLinkModal
         visible={confirmVisible}
         url={pendingUrl}

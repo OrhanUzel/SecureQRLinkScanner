@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'r
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
+import { adUnits } from '../config/adUnits';
 
 export default function AdBanner({ placement, variant }) {
   const { dark } = useAppTheme();
@@ -10,6 +11,7 @@ export default function AdBanner({ placement, variant }) {
   const [premium, setPremium] = useState(false);
   const [admod, setAdmod] = useState(null);
   const { width } = useWindowDimensions();
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -31,16 +33,37 @@ export default function AdBanner({ placement, variant }) {
     return () => { mounted = false; };
   }, []);
 
-  if (premium) return null;
+  useEffect(() => {
+    let active = true;
+    const ping = async () => {
+      try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 2500);
+        const res = await fetch('https://clients3.google.com/generate_204', { signal: ctl.signal });
+        clearTimeout(t);
+        if (active) setOnline(res?.status === 204 || (res?.ok === true));
+      } catch {
+        if (active) setOnline(false);
+      }
+    };
+    ping();
+    const id = setInterval(ping, 15000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
 
-  const unitId = 'ca-app-pub-2533405439201612/1654246063';
+  if (premium || !online) return null;
+
+  const unitId = adUnits.BANNER;
 
   const useMrec = variant === 'mrec';
-  const bannerSize = useMrec ? admod?.BannerAdSize?.MEDIUM_RECTANGLE : admod?.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER;
+  const useBanner = variant === 'banner';
+  const bannerSize = useMrec
+    ? admod?.BannerAdSize?.MEDIUM_RECTANGLE
+    : (useBanner ? admod?.BannerAdSize?.BANNER : admod?.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER);
 
   return (
     <View style={admod ? [useMrec ? styles.mrecWrap : styles.adWrap, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }] : [styles.wrap, { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }] }>
-      {admod ? (
+      {admod && unitId ? (
         <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
           <admod.BannerAd
             unitId={unitId}
@@ -54,7 +77,7 @@ export default function AdBanner({ placement, variant }) {
           <TouchableOpacity 
             style={[styles.cta, { backgroundColor: dark ? '#7c3aed' : '#7c3aed' }]}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => navigation.navigate('Premium')}
           >
             <Text style={styles.ctaText}>Reklamları kaldır</Text>
           </TouchableOpacity>

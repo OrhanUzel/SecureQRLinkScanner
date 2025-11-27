@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdvancedAdCard from '../components/AdvancedAdCard';
+import AdBanner from '../components/AdBanner';
 
 export default function HistoryScreen() {
   const { t } = useTranslation();
@@ -43,6 +44,9 @@ export default function HistoryScreen() {
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListFooterComponent={<AdvancedAdCard placement="history" />}
       />
+      <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
+        <AdBanner placement="global_footer" />
+      </View>
     </View>
   );
 }

@@ -96,4 +96,16 @@
   "confirm.yes": "Sí",
   "confirm.no": "No",
   "toast.copied": "Copiado al portapapeles"
+  ,
+  "settings.premiumTitle": "Premium",
+  "settings.premiumDesc": "Pasa a una experiencia sin anuncios más rápida y limpia.",
+  "settings.removeAds": "Quitar anuncios",
+  "settings.processing": "Procesando...",
+  "settings.premiumActive": "Premium activo",
+  "settings.premiumMonthly": "Premium mensual",
+  "settings.premiumYearly": "Premium anual",
+  "settings.premiumLifetime": "Premium de por vida",
+  "settings.restorePurchases": "Restaurar compras"
+  ,
+  "settings.restoreNone": "No hay compras para restaurar"
 }

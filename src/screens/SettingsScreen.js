@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
 import AdvancedAdCard from '../components/AdvancedAdCard';
 import AdBanner from '../components/AdBanner';
+import Toast from '../components/Toast';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -20,33 +21,61 @@ export default function SettingsScreen() {
   const [premium, setPremium] = useState(false);
   const [iap, setIap] = useState(null);
   const [products, setProducts] = useState([]);
+  const [sub, setSub] = useState(null);
+  const [offers, setOffers] = useState([]);
   const [processing, setProcessing] = useState(false);
-  const SKU_REMOVE_ADS = 'remove_ads';
+  const SKU_SUBSCRIPTION = 'secure_qr_link_scanner';
+  const SKU_LIFETIME = 'premium_lifetime';
+  const purchaseUpdateRef = useRef(null);
+  const purchaseErrorRef = useRef(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('error');
 
   useEffect(() => {
     loadSettings();
   }, []);
 
-  /*
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      if (Platform.OS !== 'ios') {
-        return;
-      }
       try {
         const mod = await import('react-native-iap');
+        if (!mounted) return;
         setIap(mod);
         try { await mod.initConnection(); } catch {}
+        try { await mod.flushFailedPurchasesCachedAsPendingAndroid?.(); } catch {}
         let items = [];
-        try { items = await mod.getProducts({ skus: [SKU_REMOVE_ADS] }); } catch {}
-        if (!items || items.length === 0) {
-          try { items = await mod.getProducts([SKU_REMOVE_ADS]); } catch {}
+        try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
+        if (items && items.length) {
+          setSub(items[0]);
+          const subOffers = items[0]?.subscriptionOfferDetailsAndroid || [];
+          setOffers(subOffers);
         }
-        if (items && items.length) setProducts(items);
+        let oneTime = [];
+        try { oneTime = await mod.fetchProducts({ skus: [SKU_LIFETIME], type: 'in-app' }); } catch {}
+        if (oneTime && oneTime.length) setProducts(oneTime);
+
+        purchaseUpdateRef.current = mod.purchaseUpdatedListener(async (purchase) => {
+          try {
+            setProcessing(false);
+            try { await mod.finishTransaction({ purchase }); } catch {}
+            await AsyncStorage.setItem('premium', 'true');
+            setPremium(true);
+          } catch {}
+        });
+        purchaseErrorRef.current = mod.purchaseErrorListener(() => {
+          setProcessing(false);
+        });
       } catch {}
     })();
+    return () => {
+      try { purchaseUpdateRef.current?.remove(); } catch {}
+      try { purchaseErrorRef.current?.remove(); } catch {}
+      try { iap?.endConnection?.(); } catch {}
+      mounted = false;
+    };
   }, []);
-  */
 
   const loadSettings = async () => {
     try {
@@ -90,28 +119,92 @@ export default function SettingsScreen() {
     navigation.navigate('Disclaimer');
   };
 
-  /*
-  const onRemoveAds = async () => {
+  const pickOfferToken = (basePlanId) => {
+    const found = offers?.find(o => o.basePlanId === basePlanId);
+    const token = found?.offerToken || found?.offerIdToken || found?.offerTokenCode;
+    if (token) return token;
+    const first = offers?.[0]?.offerToken || sub?.subscriptionOfferDetailsAndroid?.[0]?.offerToken;
+    return first || null;
+  };
+
+  const formatOfferPrice = (basePlanId) => {
+    const found = offers?.find(o => o.basePlanId === basePlanId);
+    const phase = found?.pricingPhases?.pricingPhaseList?.[0];
+    return phase?.formattedPrice || phase?.priceFormatted || null;
+  };
+
+  const buyMonthly = async () => {
     try {
+      setProcessing(true);
+      const offerToken = pickOfferToken('monthly');
+      if (iap && offerToken) {
+        try {
+          await iap.requestPurchase({
+            request: { android: { skus: [SKU_SUBSCRIPTION], subscriptionOffers: [{ sku: SKU_SUBSCRIPTION, offerToken }] } },
+            type: 'subs'
+          });
+          return;
+        } catch {}
+      }
+      setProcessing(false);
+    } catch { setProcessing(false); }
+  };
+
+  const buyYearly = async () => {
+    try {
+      setProcessing(true);
+      const offerToken = pickOfferToken('yearly');
+      if (iap && offerToken) {
+        try {
+          await iap.requestPurchase({
+            request: { android: { skus: [SKU_SUBSCRIPTION], subscriptionOffers: [{ sku: SKU_SUBSCRIPTION, offerToken }] } },
+            type: 'subs'
+          });
+          return;
+        } catch {}
+      }
+      setProcessing(false);
+    } catch { setProcessing(false); }
+  };
+
+  const buyLifetime = async () => {
+    try {
+      setProcessing(true);
       if (iap) {
-        setProcessing(true);
-        let purchased = null;
-        try { purchased = await iap.requestPurchase({ sku: SKU_REMOVE_ADS }); } catch {}
-        if (!purchased) {
-          try { purchased = await iap.requestPurchase(SKU_REMOVE_ADS); } catch {}
-        }
-        if (purchased) {
-          await AsyncStorage.setItem('premium', 'true');
-          setPremium(true);
-        }
+        try {
+          await iap.requestPurchase({ request: { android: { skus: [SKU_LIFETIME] } }, type: 'in-app' });
+          return;
+        } catch {}
         setProcessing(false);
         return;
       }
       await AsyncStorage.setItem('premium', 'true');
       setPremium(true);
-    } catch {}
+      setProcessing(false);
+    } catch { setProcessing(false); }
   };
-  */
+
+  const restorePurchases = async () => {
+    try {
+      if (!iap) return;
+      setProcessing(true);
+      let purchases = [];
+      try { purchases = await iap.getAvailablePurchases(); } catch {}
+      const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
+      if (hasPremium) {
+        await AsyncStorage.setItem('premium', 'true');
+        setPremium(true);
+        setToastType('success');
+        setToastMessage(t('settings.premiumActive'));
+        setToastVisible(true);
+      } else {
+        setToastType('error');
+        setToastMessage(t('settings.restoreNone'));
+        setToastVisible(true);
+      }
+      setProcessing(false);
+    } catch { setProcessing(false); }
+  };
 
   const languages = [
    
@@ -164,7 +257,7 @@ export default function SettingsScreen() {
           {!premium ? (
             <TouchableOpacity 
               style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
-              /* onPress={onRemoveAds} */
+              onPress={() => navigation.navigate('Premium')}
               activeOpacity={0.8}
             >
               <Text style={styles.disclaimerIcon}>🚀</Text>
@@ -325,12 +418,16 @@ export default function SettingsScreen() {
       )}
 
       <AdvancedAdCard placement="settings" />
+      <View style={{ borderTopWidth: 1, borderTopColor: dark ? '#30363d' : '#e1e4e8', padding: 8 }}>
+        <AdBanner placement="global_footer" />
+      </View>
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
           {t('settings.version')} 1.0.0
         </Text>
       </View>
+      <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} />
     </ScrollView>
   );
 }

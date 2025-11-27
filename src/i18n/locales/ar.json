@@ -94,6 +94,12 @@
   "settings.premiumDesc": "انتقل إلى تجربة بدون إعلانات للحصول على واجهة أسرع وأنظف.",
   "settings.removeAds": "إزالة الإعلانات",
   "settings.processing": "جارٍ المعالجة...",
-  "settings.premiumActive": "بريميوم مفعّل"
+  "settings.premiumActive": "بريميوم مفعّل",
+  "settings.premiumMonthly": "بريميوم شهري",
+  "settings.premiumYearly": "بريميوم سنوي",
+  "settings.premiumLifetime": "بريميوم مدى الحياة",
+  "settings.restorePurchases": "استعادة المشتريات"
+  ,
+  "settings.restoreNone": "لا توجد مشتريات للاستعادة"
 }
   

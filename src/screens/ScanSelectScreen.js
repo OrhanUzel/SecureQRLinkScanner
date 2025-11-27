@@ -5,6 +5,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
+import AdvancedAdCard from '../components/AdvancedAdCard';
+import { adUnits } from '../config/adUnits';
 
 export default function ScanSelectScreen({ navigation }) {
   const { t } = useTranslation();
@@ -82,9 +84,9 @@ export default function ScanSelectScreen({ navigation }) {
   );
 
   const ADS = {
-    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
-    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
-    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+    REWARDED_INTERSTITIAL: adUnits.REWARDED_INTERSTITIAL,
+    REWARDED: adUnits.REWARDED,
+    INTERSTITIAL: adUnits.INTERSTITIAL,
   };
 
   const runHistoryGate = async () => {
@@ -96,6 +98,7 @@ export default function ScanSelectScreen({ navigation }) {
     if (!mod) return true;
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
     const tryRewardedInterstitial = async () => {
+      if (!ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
       const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -108,6 +111,7 @@ export default function ScanSelectScreen({ navigation }) {
       });
     };
     const tryRewarded = async () => {
+      if (!ADS.REWARDED) throw new Error('missing_unit');
       const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -120,6 +124,7 @@ export default function ScanSelectScreen({ navigation }) {
       });
     };
     const tryInterstitial = async () => {
+      if (!ADS.INTERSTITIAL) throw new Error('missing_unit');
       const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
@@ -139,6 +144,7 @@ export default function ScanSelectScreen({ navigation }) {
     <View 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
     >
+
 
       
       
@@ -177,7 +183,7 @@ export default function ScanSelectScreen({ navigation }) {
       {/* Quick Stats removed per request */}
 
       {/* Footer */}
-      <AdBanner placement="home" />
+      <AdvancedAdCard placement="home" />
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
           {t('scan.footer.text')}

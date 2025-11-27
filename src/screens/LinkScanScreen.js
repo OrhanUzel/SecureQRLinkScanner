@@ -221,9 +221,7 @@ export default function LinkScanScreen() {
           </View>
         </View>
       )}
-      <View style={[styles.adContainer, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
-        <AdvancedAdCard placement="link" large />
-      </View>
+      <AdvancedAdCard placement="link" large />
       <ConfirmOpenLinkModal 
         visible={confirmVisible}
         url={pendingUrl}

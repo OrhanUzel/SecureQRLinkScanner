@@ -11,11 +11,13 @@ import ImageScanScreen from './src/screens/ImageScanScreen';
 import CreateQrScreen from './src/screens/CreateQrScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import PremiumScreen from './src/screens/PremiumScreen';
 import DisclaimerScreen from './src/screens/DisclaimerScreen';
 import ConsentModal, { hasConsent, setConsent } from './src/components/ConsentModal';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useAppTheme } from './src/theme/ThemeContext';
 import { loadBlacklist } from './src/utils/classifier';
+import { adUnits } from './src/config/adUnits';
 
 const Stack = createNativeStackNavigator();
 
@@ -23,9 +25,9 @@ function RootNavigator() {
   const { dark } = useAppTheme();
 
   const ADS = {
-    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
-    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
-    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+    REWARDED_INTERSTITIAL: adUnits.REWARDED_INTERSTITIAL,
+    REWARDED: adUnits.REWARDED,
+    INTERSTITIAL: adUnits.INTERSTITIAL,
   };
 
   const runHistoryGate = async () => {
@@ -35,6 +37,7 @@ function RootNavigator() {
     if (!mod) return true;
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
     const tryRewardedInterstitial = async () => {
+      if (!ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
       const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -47,6 +50,7 @@ function RootNavigator() {
       });
     };
     const tryRewarded = async () => {
+      if (!ADS.REWARDED) throw new Error('missing_unit');
       const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -59,6 +63,7 @@ function RootNavigator() {
       });
     };
     const tryInterstitial = async () => {
+      if (!ADS.INTERSTITIAL) throw new Error('missing_unit');
       const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
@@ -145,6 +150,7 @@ function RootNavigator() {
         <Stack.Screen name="CreateQR" component={CreateQrScreen} options={{ title: i18n.t('scan.create') }} />
         <Stack.Screen name="History" component={HistoryScreen} options={{ title: i18n.t('history.title') }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: i18n.t('settings.title') }} />
+        <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: i18n.t('settings.premiumTitle') }} />
         <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: i18n.t('disclaimer.title'), presentation: 'modal' }} />
       </Stack.Navigator>
     </NavigationContainer>

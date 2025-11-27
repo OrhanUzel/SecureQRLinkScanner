@@ -5,7 +5,6 @@ module.exports = {
     },
   },
   dependencies: {
-    'react-native-iap': { platforms: { android: null } },
     'react-native-admob-native-ads': { platforms: { android: null } },
   },
 };

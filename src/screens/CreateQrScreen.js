@@ -12,6 +12,8 @@ import AdBanner from '../components/AdBanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
+import { adUnits } from '../config/adUnits';
+
 export default function CreateQrScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
@@ -36,9 +38,9 @@ export default function CreateQrScreen() {
   const [infoMessage, setInfoMessage] = useState('');
 
   const ADS = {
-    REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335837794',
-    REWARDED: 'ca-app-pub-2533405439201612/1333632111',
-    INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+    REWARDED_INTERSTITIAL: adUnits.REWARDED_INTERSTITIAL,
+    REWARDED: adUnits.REWARDED,
+    INTERSTITIAL: adUnits.INTERSTITIAL,
   };
 
   const generateMatrix = useCallback(async (text) => {
@@ -270,6 +272,7 @@ export default function CreateQrScreen() {
       };
       const tryInterstitial = async () => {
         const unitId = ADS.INTERSTITIAL;
+        if (!unitId) throw new Error('missing_unit');
         const ad = InterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
@@ -306,6 +309,7 @@ export default function CreateQrScreen() {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
       contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
@@ -511,7 +515,7 @@ export default function CreateQrScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.premiumBtn, { backgroundColor: dark ? '#1b2330' : '#f0f4f8', borderColor: dark ? '#243044' : '#dbe2ea' }]}
-              onPress={() => { setRewardVisible(false); navigation.navigate('Settings'); }}
+              onPress={() => { setRewardVisible(false); navigation.navigate('Premium'); }}
               activeOpacity={0.8}
             >
               <Text style={[styles.premiumText, { color: dark ? '#4a9eff' : '#0066cc' }]}>Reklamsız Premium</Text>
@@ -545,6 +549,10 @@ export default function CreateQrScreen() {
         onHide={() => setToast(prev => ({ ...prev, visible: false }))}
       />
     </ScrollView>
+    <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
+      <AdBanner placement="global_footer" />
+    </View>
+    </View>
   );
 }
 

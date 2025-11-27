@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import AdBanner from '../components/AdBanner';
 import { WebView } from 'react-native-webview';
 import { Asset } from 'expo-asset';
 
@@ -24,7 +25,12 @@ export default function DisclaimerScreen() {
     return <View style={styles.center}><ActivityIndicator /></View>;
   }
   return (
-    <WebView originWhitelist={["*"]} source={{ html }} style={{ flex: 1 }} />
+    <View style={{ flex: 1 }}>
+      <WebView originWhitelist={["*"]} source={{ html }} style={{ flex: 1 }} />
+      <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
+        <AdBanner placement="global_footer" />
+      </View>
+    </View>
   );
 }
 

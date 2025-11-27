@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Share, ScrollView, useWindowDimensions, Animated, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Share, ScrollView, useWindowDimensions, Animated, Modal, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,6 +14,7 @@ import AdBanner from '../components/AdBanner';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
+import AdvancedAdCard from '../components/AdvancedAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../components/Toast';
 
@@ -28,6 +29,7 @@ export default function ImageScanScreen() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [offline, setOffline] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [autoPickTriggered, setAutoPickTriggered] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [pendingUrl, setPendingUrl] = useState(null);
@@ -38,6 +40,7 @@ export default function ImageScanScreen() {
 
   const scanImageForCodes = async (uri) => {
     try {
+      setLoading(true);
       if (Platform.OS === 'web') {
         const { BrowserMultiFormatReader } = await import('@zxing/library');
         const reader = new BrowserMultiFormatReader();
@@ -102,6 +105,8 @@ export default function ImageScanScreen() {
     } catch (e) {
       setResult(null);
       setError(t('scan.noCodeFound') || 'Bu görselde kod bulunamadı');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -169,16 +174,25 @@ export default function ImageScanScreen() {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb', padding: compact ? 12 : 20 }]}
       contentContainerStyle={{ gap: 12, paddingBottom: compact ? 48 : 72 }}
       showsVerticalScrollIndicator={false}
     > 
+      <Modal visible={loading} transparent animationType="fade">
+        <View style={styles.loadingOverlayModal}>
+          <View style={[styles.loadingCard, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
+            <ActivityIndicator size="large" color={dark ? '#9ecaff' : '#0969da'} />
+            <Text style={[styles.loadingText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('loading.securityChecks')}</Text>
+          </View>
+        </View>
+      </Modal>
       
       {image && (
         <>
           <Image source={{ uri: image }} style={styles.preview} />
-          <AdBanner placement="image_preview_under" />
+          
         </>
       )}
       {error && (
@@ -197,6 +211,9 @@ export default function ImageScanScreen() {
             </TouchableOpacity>
           )}
         </View>
+      )}
+      {error && !result && (
+        <AdvancedAdCard placement="image_scan_bottom" />
       )}
       {result && (
         <>
@@ -259,6 +276,7 @@ export default function ImageScanScreen() {
               </TouchableOpacity>
             )}
           </View>
+          <AdvancedAdCard placement="image_scan_bottom" />
         </>
       )}
       
@@ -291,6 +309,10 @@ export default function ImageScanScreen() {
       </Modal>
       */}
     </ScrollView>
+    <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
+      <AdBanner placement="global_footer" />
+    </View>
+    </View>
   );
 }
 
