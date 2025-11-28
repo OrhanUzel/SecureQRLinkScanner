@@ -37,7 +37,7 @@ function RootNavigator() {
     if (!mod) return true;
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
     const tryRewardedInterstitial = async () => {
-      if (!ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
+      if (typeof ADS.REWARDED_INTERSTITIAL !== 'string' || !ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
       const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -50,7 +50,7 @@ function RootNavigator() {
       });
     };
     const tryRewarded = async () => {
-      if (!ADS.REWARDED) throw new Error('missing_unit');
+      if (typeof ADS.REWARDED !== 'string' || !ADS.REWARDED) throw new Error('missing_unit');
       const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
@@ -63,7 +63,7 @@ function RootNavigator() {
       });
     };
     const tryInterstitial = async () => {
-      if (!ADS.INTERSTITIAL) throw new Error('missing_unit');
+      if (typeof ADS.INTERSTITIAL !== 'string' || !ADS.INTERSTITIAL) throw new Error('missing_unit');
       const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });

@@ -63,7 +63,7 @@ export default function AdBanner({ placement, variant }) {
 
   return (
     <View style={admod ? [useMrec ? styles.mrecWrap : styles.adWrap, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }] : [styles.wrap, { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }] }>
-      {admod && unitId ? (
+      {admod && typeof unitId === 'string' && unitId ? (
         <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
           <admod.BannerAd
             unitId={unitId}

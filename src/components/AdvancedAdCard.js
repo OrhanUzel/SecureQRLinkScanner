@@ -75,7 +75,7 @@ export default function AdvancedAdCard({ placement, large = false }) {
   const mediaHeight = large ? 240 : 180;
   const cardPadding = large ? 16 : 12;
   const cardGap = large ? 12 : 10;
-  if (!nativeUnitId) {
+  if (typeof nativeUnitId !== 'string' || !nativeUnitId) {
     return <AdBanner placement={placement} variant="mrec" />;
   }
   return (

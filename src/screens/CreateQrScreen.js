@@ -246,6 +246,7 @@ export default function CreateQrScreen() {
       const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
       const tryRewardedInterstitial = async () => {
         const unitId = ADS.REWARDED_INTERSTITIAL;
+        if (typeof unitId !== 'string' || !unitId) throw new Error('missing_unit');
         const ad = RewardedInterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           let earned = false;
@@ -259,6 +260,7 @@ export default function CreateQrScreen() {
       };
       const tryRewarded = async () => {
         const unitId = ADS.REWARDED;
+        if (typeof unitId !== 'string' || !unitId) throw new Error('missing_unit');
         const ad = RewardedAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           let earned = false;
@@ -272,7 +274,7 @@ export default function CreateQrScreen() {
       };
       const tryInterstitial = async () => {
         const unitId = ADS.INTERSTITIAL;
-        if (!unitId) throw new Error('missing_unit');
+        if (typeof unitId !== 'string' || !unitId) throw new Error('missing_unit');
         const ad = InterstitialAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true });
         await new Promise((resolve, reject) => {
           const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });

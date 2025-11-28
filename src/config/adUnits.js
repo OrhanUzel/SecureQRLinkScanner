@@ -1,11 +1,7 @@
-import Constants from 'expo-constants';
-
-const extra = Constants?.expoConfig?.extra?.admob || {};
-
 export const adUnits = {
-  REWARDED_INTERSTITIAL: extra.rewardedInterstitial || null,
-  REWARDED: extra.rewarded || null,
-  INTERSTITIAL: extra.interstitial || null,
-  NATIVE: extra.native || null,
-  BANNER: extra.banner || null,
+  REWARDED_INTERSTITIAL: 'ca-app-pub-2533405439201612/6335387794',
+  REWARDED: 'ca-app-pub-2533405439201612/1333632111',
+  INTERSTITIAL: 'ca-app-pub-2533405439201612/8961551131',
+  NATIVE: 'ca-app-pub-2533405439201612/9020550443',
+  BANNER: 'ca-app-pub-2533405439201612/1654246063',
 };
