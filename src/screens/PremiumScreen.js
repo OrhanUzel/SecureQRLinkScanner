@@ -125,7 +125,7 @@ export default function PremiumScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]} contentContainerStyle={{ padding: 20, paddingBottom: 24 }}>
+    <ScrollView style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]} contentContainerStyle={{ padding: 20, paddingBottom: 24 }}>
       <View style={styles.headerRow}>
         <View style={[styles.headerIconWrap, { backgroundColor: dark ? '#1b2330' : '#eef3f9', borderColor: dark ? '#243044' : '#dbe2ea' }]}> 
           <Ionicons name="sparkles" size={20} color={dark ? '#9ecaff' : '#0066cc'} />

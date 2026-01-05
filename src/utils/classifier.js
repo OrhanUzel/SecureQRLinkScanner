@@ -73,6 +73,14 @@ const SAFE_EXECUTABLE_HOSTS = [
 // Utility Functions
 // ------------------------
 
+function sanitizeInput(raw) {
+  return String(raw || '')
+    .replace(/^\uFEFF/, '') // Remove BOM
+    .replace(/^[\u200B\u200C\u200D\u2060\u202A-\u202E]+/, '') // Leading zero-width / directional marks
+    .replace(/[\u200B\u200C\u200D\u2060]/g, '') // Remove zero-width chars inside
+    .trim();
+}
+
 function isIPv4(host) {
   const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!m) return false;
@@ -274,8 +282,55 @@ async function classifyURL(urlString, u) {
  * Synchronous classification (may miss blacklist on first calls)
  * Use classifyInputAsync for guaranteed blacklist checking
  */
-export function classifyInput(input) {
-  let normalized = input.trim();
+export function classifyInput(input, scannedType = null) {
+  let normalized = sanitizeInput(input);
+  const pre = normalized.toLowerCase();
+
+  const isBarcode = scannedType && ['ean13', 'ean8', 'upc_a', 'upc_e', 'code39', 'code93', 'code128', 'codabar', 'itf', 'rss14', 'pdf417', 'aztec', 'datamatrix'].includes(scannedType);
+
+  // Try standard WiFi format first
+  const w = parseWifi(normalized);
+  if (w) return w;
+
+  const te = pre.startsWith('tel:') ? parseTel(normalized) : null;
+  if (te) return te;
+  const ma = pre.startsWith('mailto:') ? parseMailto(normalized) : null;
+  if (ma) return ma;
+  const plainEmail = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(normalized) ? normalized : null;
+  if (plainEmail) {
+    const addr = plainEmail;
+    const nrm = `mailto:${encodeURIComponent(addr)}`;
+    return { type: 'email', normalized: nrm, isUrl: false, email: { to: addr, subject: '', body: '' }, level: 'secure', reasons: [], score: 0 };
+  }
+  const mm = parseMatmsg(normalized);
+  if (mm) return mm;
+  const sm = parseSms(normalized);
+  if (sm) return sm;
+  const ge = parseGeo(normalized);
+  if (ge) return ge;
+  const vc = parseVCard(normalized);
+  if (vc) return vc;
+  const ve = parseVEvent(normalized);
+  if (ve) return ve;
+
+  // Fallback: Some scanners (like expo-camera) may return WiFi data in alternative formats
+  // Try to detect and reconstruct WiFi format from common patterns after other formats are checked
+  const wifiFallback = tryParseWifiFallback(normalized);
+  if (wifiFallback) {
+    console.log('[classifyInput] WiFi detected via fallback:', wifiFallback);
+    return wifiFallback;
+  }
+
+  const phoneLike = !isBarcode && /^[+()\-\s0-9]{6,}$/.test(normalized) && /[0-9]{6,}/.test(normalized);
+  if (phoneLike) {
+    const num = normalized.replace(/\s+/g, '');
+    return { type: 'tel', normalized: `tel:${num}`, isUrl: false, tel: { number: num } };
+  }
+
+  // If it is a known barcode type and not a URL structure, treat as plain text
+  if (isBarcode && !/^https?:\/\//i.test(normalized) && !normalized.includes('.')) {
+    return { normalized, isUrl: false, type: 'text', level: 'secure', reasons: [], score: 0 };
+  }
   
   try {
     // Add scheme if missing for parsing
@@ -390,8 +445,7 @@ export function classifyInput(input) {
       level = 'suspicious';
     }
     
-    saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
-    return { normalized, isUrl: true, level, reasons, score };
+    return { normalized, isUrl: true, type: 'url', level, reasons, score };
     
   } catch (e) {
     const lowerText = normalized.toLowerCase();
@@ -403,17 +457,59 @@ export function classifyInput(input) {
       score += Math.min(foundKeywords.length, 3);
     }
     const level = score >= 1 ? 'suspicious' : 'secure';
-    saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
-    return { normalized, isUrl: false, level, reasons, score };
-  }
+    return { normalized, isUrl: false, type: 'text', level, reasons, score };
+}
 }
 
 /**
  * Async classification with guaranteed blacklist checking
  * Recommended for critical security checks
  */
-export async function classifyInputAsync(input) {
-  let normalized = input.trim();
+export async function classifyInputAsync(input, scannedType = null) {
+  let normalized = sanitizeInput(input);
+  const pre = normalized.toLowerCase();
+
+  const isBarcode = scannedType && ['ean13', 'ean8', 'upc_a', 'upc_e', 'code39', 'code93', 'code128', 'codabar', 'itf', 'rss14', 'pdf417', 'aztec', 'datamatrix'].includes(scannedType);
+
+  const w = parseWifi(normalized);
+  if (w) return w;
+  const te = pre.startsWith('tel:') ? parseTel(normalized) : null;
+  if (te) return te;
+  const ma = pre.startsWith('mailto:') ? parseMailto(normalized) : null;
+  if (ma) return ma;
+  const plainEmail = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(normalized) ? normalized : null;
+  if (plainEmail) {
+    const addr = plainEmail;
+    const nrm = `mailto:${encodeURIComponent(addr)}`;
+    return { type: 'email', normalized: nrm, isUrl: false, email: { to: addr, subject: '', body: '' }, level: 'secure', reasons: [], score: 0 };
+  }
+  const mm = parseMatmsg(normalized);
+  if (mm) return mm;
+  const sm = parseSms(normalized);
+  if (sm) return sm;
+  const ge = parseGeo(normalized);
+  if (ge) return ge;
+  const vc = parseVCard(normalized);
+  if (vc) return vc;
+  const ve = parseVEvent(normalized);
+  if (ve) return ve;
+
+  const wifiFallback = tryParseWifiFallback(normalized);
+  if (wifiFallback) {
+    console.log('[classifyInputAsync] WiFi detected via fallback:', wifiFallback);
+    return wifiFallback;
+  }
+
+  const phoneLike = !isBarcode && /^[+()\-\s0-9]{6,}$/.test(normalized) && /[0-9]{6,}/.test(normalized);
+  if (phoneLike) {
+    const num = normalized.replace(/\s+/g, '');
+    return { type: 'tel', normalized: `tel:${num}`, isUrl: false, tel: { number: num } };
+  }
+
+  // If it is a known barcode type and not a URL structure, treat as plain text
+  if (isBarcode && !/^https?:\/\//i.test(normalized) && !normalized.includes('.')) {
+    return { normalized, isUrl: false, type: 'text', level: 'secure', reasons: [], score: 0 };
+  }
   
   try {
     // Add scheme if missing for parsing
@@ -427,8 +523,7 @@ export async function classifyInputAsync(input) {
     // Run full async classification
     const { level, reasons, score } = await classifyURL(normalized, u);
     
-    saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
-    return { normalized, isUrl: true, level, reasons, score };
+    return { normalized, isUrl: true, type: 'url', level, reasons, score };
     
   } catch (e) {
     const lowerText = normalized.toLowerCase();
@@ -440,9 +535,8 @@ export async function classifyInputAsync(input) {
       score += Math.min(foundKeywords.length, 3);
     }
     const level = score >= 1 ? 'suspicious' : 'secure';
-    saveHistory({ content: normalized, level, reasons, score, timestamp: Date.now() });
-    return { normalized, isUrl: false, level, reasons, score };
-  }
+    return { normalized, isUrl: false, type: 'text', level, reasons, score };
+}
 }
 
 // ------------------------
@@ -484,4 +578,272 @@ export async function clearHistory() {
     console.error('[Classifier] Failed to clear history:', err);
     return false;
   }
+}
+/**
+ * Fallback WiFi detection for scanners that return data without WIFI: prefix
+ * Some barcode scanners (like expo-camera) may parse WiFi QR and return just SSID/password
+ */
+function tryParseWifiFallback(raw) {
+  const s = String(raw || '').trim();
+  
+  // Skip if it looks like a URL, email, or other known format
+  if (/^(https?:|tel:|mailto:|sms:|smsto:|geo:|BEGIN:V)/i.test(s)) return null;
+  if (s.includes('@') && s.includes('.')) return null; // Looks like email
+  if (/^[+\d\s()-]{7,}$/.test(s)) return null; // Looks like phone
+  
+  // Pattern 1: "SSID password" or "SSID\npassword" format (common in some scanners)
+  // SSID typically doesn't have spaces, password follows
+  const spaceMatch = s.match(/^([^\s]+)\s+(.+)$/);
+  if (spaceMatch) {
+    const [, possibleSsid, possiblePass] = spaceMatch;
+    // Validate: SSID should look like a network name (alphanumeric, underscores, hyphens)
+    if (/^[\w\-_]+$/.test(possibleSsid) && possiblePass.length >= 4) {
+      console.log('[tryParseWifiFallback] Detected pattern: SSID space PASSWORD');
+      const ssid = possibleSsid;
+      const password = possiblePass.trim();
+      const normalized = `WIFI:T:WPA;S:${ssid};P:${password};;`;
+      return { 
+        type: 'wifi', 
+        normalized, 
+        isUrl: false, 
+        wifi: { ssid, password, security: 'WPA', hidden: false },
+        level: 'secure',
+        reasons: [],
+        score: 0
+      };
+    }
+  }
+  
+  // Pattern 2: Key-value pairs without WIFI: prefix (T:WPA;S:SSID;P:PASS)
+  if (s.includes(';') && (s.includes('S:') || s.includes('s:'))) {
+    // Try to parse as if it had WIFI: prefix
+    const reconstructed = 'WIFI:' + s;
+    // Use regex to extract key-value pairs
+    const kvMatch = {};
+    const tokens = reconstructed.replace(/^WIFI:/i, '').split(';');
+    for (const tok of tokens) {
+      const idx = tok.indexOf(':');
+      if (idx > 0) {
+        const k = tok.slice(0, idx).trim().toUpperCase();
+        const v = tok.slice(idx + 1);
+        if (k && !kvMatch[k]) kvMatch[k] = v;
+      }
+    }
+    if (kvMatch.S) {
+      console.log('[tryParseWifiFallback] Detected pattern: Key-value without WIFI prefix');
+      const ssid = kvMatch.S;
+      const password = kvMatch.P || '';
+      const security = (kvMatch.T || 'WPA').toUpperCase();
+      const hidden = ['true', '1', 'yes'].includes((kvMatch.H || '').toLowerCase());
+      const normalized = `WIFI:T:${security};S:${ssid};P:${password};;`;
+      return { 
+        type: 'wifi', 
+        normalized, 
+        isUrl: false, 
+        wifi: { ssid, password, security, hidden },
+        level: 'secure',
+        reasons: [],
+        score: 0
+      };
+    }
+  }
+  
+  return null;
+}
+
+function unescapeWifi(s) {
+  return String(s || '').replace(/\\([;,:\\])/g, '$1');
+}
+
+function parseWifi(raw) {
+  // Remove BOM, invisible chars, and normalize whitespace
+  let s = String(raw || '')
+    .replace(/^\uFEFF/, '') // Remove BOM
+    .replace(/^[\x00-\x1F\x7F-\x9F]+/, '') // Remove control chars at start
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove all control chars except newlines/tabs
+    .trim();
+  
+  console.log('[parseWifi] Raw input length:', raw?.length, 'Cleaned length:', s.length);
+  console.log('[parseWifi] Input:', s, '| Starts with WIFI:', /^WIFI:/i.test(s));
+  console.log('[parseWifi] First 10 char codes:', s.substring(0, 10).split('').map(c => c.charCodeAt(0)));
+  
+  if (!/^WIFI:/i.test(s)) return null;
+
+  // Robust tokenization: split on unescaped ';'
+  const body = s.replace(/^WIFI:/i, '');
+  const tokens = [];
+  let cur = '';
+  let esc = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (esc) {
+      cur += ch;
+      esc = false;
+      continue;
+    }
+    if (ch === '\\') {
+      cur += ch;
+      esc = true;
+      continue;
+    }
+    if (ch === ';') {
+      const t = cur.trim();
+      if (t) tokens.push(t);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  const tail = cur.trim();
+  if (tail) tokens.push(tail);
+
+  const kv = {};
+  for (const tok of tokens) {
+    const idx = tok.indexOf(':');
+    if (idx <= 0) continue;
+    const k = tok.slice(0, idx).trim().toUpperCase();
+    const v = tok.slice(idx + 1);
+    if (!k) continue;
+    if (kv[k] !== undefined) continue;
+    kv[k] = v;
+  }
+
+  const ssidRaw = kv.S;
+  if (ssidRaw === undefined) return null;
+  const ssid = unescapeWifi(ssidRaw);
+  const tVal = String(kv.T || '').trim().toUpperCase();
+  const pass = unescapeWifi(kv.P ?? '');
+  const hiddenVal = String(kv.H || '').trim().toLowerCase();
+  const hidden = hiddenVal === 'true' || hiddenVal === '1' || hiddenVal === 'yes';
+
+  let sec = 'WPA';
+  if (tVal === 'WEP') sec = 'WEP';
+  else if (tVal === 'NOPASS' || tVal === 'NO' || tVal === 'NONE' || tVal === 'OPEN') sec = 'nopass';
+  else if (tVal) sec = 'WPA';
+
+  const escapeOut = (v) => String(v || '').replace(/([\\;,:])/g, '\\$1');
+  const parts = [`T:${sec}`, `S:${escapeOut(ssid)}`];
+  if (sec !== 'nopass') parts.push(`P:${escapeOut(pass)}`);
+  if (hidden) parts.push('H:true');
+  const normalized = 'WIFI:' + parts.join(';') + ';';
+
+  return { type: 'wifi', normalized, isUrl: false, wifi: { ssid, password: pass, security: sec, hidden } };
+}
+
+function parseTel(raw) {
+  const m = String(raw).match(/^tel:(.+)$/i);
+  if (!m) return null;
+  const number = m[1].trim();
+  return { type: 'tel', normalized: `tel:${number}`, isUrl: false, tel: { number } };
+}
+
+function parseMailto(raw) {
+  const m = String(raw).match(/^mailto:([^?]*)?(?:\?([^#]*))?$/i);
+  if (!m) return null;
+  const to = decodeURIComponent(m[1] || '');
+  const q = (m[2] || '').split('&').filter(Boolean);
+  const params = {};
+  for (const kv of q) {
+    const [k, v] = kv.split('=');
+    if (k) params[k.toLowerCase()] = decodeURIComponent(v || '');
+  }
+  const subject = params.subject || '';
+  const body = params.body || '';
+  const normalized = `mailto:${encodeURIComponent(to)}${subject || body ? `?${[subject ? `subject=${encodeURIComponent(subject)}` : '', body ? `body=${encodeURIComponent(body)}` : ''].filter(Boolean).join('&')}` : ''}`;
+  return { type: 'email', normalized, isUrl: false, email: { to, subject, body } };
+}
+
+function parseMatmsg(raw) {
+  const s = String(raw);
+  if (!/^MATMSG:/i.test(s)) return null;
+  const get = (key) => {
+    const m = s.match(new RegExp(`${key}:([^;]*)`, 'i'));
+    return m ? m[1] : '';
+  };
+  const to = get('TO');
+  const sub = get('SUB');
+  const body = get('BODY');
+  const normalized = `mailto:${encodeURIComponent(to)}${(sub || body) ? `?${[sub ? `subject=${encodeURIComponent(sub)}` : '', body ? `body=${encodeURIComponent(body)}` : ''].filter(Boolean).join('&')}` : ''}`;
+  return { type: 'email', normalized, isUrl: false, email: { to, subject: sub, body } };
+}
+
+function buildSmsNormalized(number, body) {
+  const encodedNumber = encodeURIComponent(number);
+  const encodedBody = body ? `?body=${encodeURIComponent(body)}` : '';
+  return `sms:${encodedNumber}${encodedBody}`;
+}
+
+function parseSms(raw) {
+  const m1 = String(raw).match(/^SMSTO:([^:;]+)(?::([^;]+))?$/i);
+  if (m1) {
+    const number = m1[1].trim();
+    const body = (m1[2] || '').trim();
+    const normalized = buildSmsNormalized(number, body);
+    return { type: 'sms', normalized, isUrl: false, sms: { number, body } };
+  }
+  const m2 = String(raw).match(/^sms:([^?]+)(?:\?body=([^#]*))?$/i);
+  if (m2) {
+    const number = decodeURIComponent(m2[1] || '').trim();
+    const body = decodeURIComponent(m2[2] || '').trim();
+    const normalized = buildSmsNormalized(number, body);
+    return { type: 'sms', normalized, isUrl: false, sms: { number, body } };
+  }
+
+  // Expo barcode için: "<number>\n<body>" veya "<number> body"
+  const m3 = String(raw).match(/^([+0-9()\-\s]{4,})[\r\n]+([\s\S]+)$/);
+  if (m3) {
+    const number = m3[1].replace(/\s+/g, '').trim();
+    const body = (m3[2] || '').trim();
+    if (number && body) {
+      const normalized = buildSmsNormalized(number, body);
+      return { type: 'sms', normalized, isUrl: false, sms: { number, body } };
+    }
+  }
+
+  return null;
+}
+
+function parseGeo(raw) {
+  const m = String(raw).match(/^geo:([\-0-9.]+),([\-0-9.]+)(?:\?q=([^#]*))?$/i);
+  if (!m) return null;
+  const lat = parseFloat(m[1]);
+  const lon = parseFloat(m[2]);
+  const q = decodeURIComponent(m[3] || '');
+  const normalized = `geo:${lat},${lon}${q ? `?q=${encodeURIComponent(q)}` : ''}`;
+  return { type: 'geo', normalized, isUrl: false, geo: { lat, lon, query: q } };
+}
+
+function parseVCard(raw) {
+  const s = String(raw);
+  if (!/BEGIN:VCARD/i.test(s)) return null;
+  const normalized = s.trim();
+  const get = (key) => {
+    const m = s.match(new RegExp(`^${key}:([^\r\n]*)`, 'im'));
+    return m ? m[1].trim() : '';
+  };
+  const fn = get('FN') || '';
+  const n = get('N') || '';
+  const tel = get('TEL') || '';
+  const email = get('EMAIL') || '';
+  const org = get('ORG') || '';
+  const title = get('TITLE') || '';
+  const adr = get('ADR') || '';
+  const url = get('URL') || '';
+  return { type: 'vcard', normalized, isUrl: false, vcard: { fn, n, tel, email, org, title, adr, url } };
+}
+
+function parseVEvent(raw) {
+  const s = String(raw);
+  if (!( /BEGIN:VEVENT/i.test(s) || /BEGIN:VCALENDAR/i.test(s))) return null;
+  const normalized = s.trim();
+  const get = (key) => {
+    const m = s.match(new RegExp(`^${key}:([^\r\n]*)`, 'im'));
+    return m ? m[1].trim() : '';
+  };
+  const summary = get('SUMMARY') || '';
+  const location = get('LOCATION') || '';
+  const description = get('DESCRIPTION') || '';
+  const dtstart = get('DTSTART') || '';
+  const dtend = get('DTEND') || '';
+  return { type: 'event', normalized, isUrl: false, event: { summary, location, description, dtstart, dtend } };
 }

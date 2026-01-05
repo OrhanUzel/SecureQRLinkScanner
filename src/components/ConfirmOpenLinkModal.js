@@ -26,7 +26,7 @@ export default function ConfirmOpenLinkModal({ visible, url, onConfirm, onCancel
           </View>
           <Text style={[styles.message, { color: dark ? '#8b98a5' : '#3b4654' }]}>{t('confirm.openMessage')}</Text>
           {!!url && (
-            <View style={[styles.urlBox, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb', borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
+            <View style={[styles.urlBox, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
               <Text style={[styles.urlText, { color: dark ? '#9ecaff' : '#0969da' }]} numberOfLines={2}>
                 {url}
               </Text>

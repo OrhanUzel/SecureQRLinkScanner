@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, Animated, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
+import { getUsomInfo } from '../utils/usomHelper';
+import { detectGs1Country } from '../utils/countryHelper';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Animated, ActivityIndicator, ScrollView, useWindowDimensions, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -10,14 +12,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { classifyInput } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
+import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
 import AdvancedAdCard from '../components/AdvancedAdCard';
+import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import OfflineNotice from '../components/OfflineNotice';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CodeScanScreen({ navigation }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { dark } = useAppTheme();
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
@@ -25,6 +33,7 @@ export default function CodeScanScreen({ navigation }) {
   const cameraRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const isScanning = useRef(false);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [result, setResult] = useState(null);
@@ -38,6 +47,8 @@ export default function CodeScanScreen({ navigation }) {
   const [pendingUrl, setPendingUrl] = useState(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
+  const insets = useSafeAreaInsets();
 
   // Her girişte (ekran odaklandığında) izni tekrar iste.
   // Android OS izin ekranını otomatik tetikler (canAskAgain=true ise).
@@ -69,13 +80,54 @@ export default function CodeScanScreen({ navigation }) {
     try {
       const raw = await AsyncStorage.getItem('scan_history');
       const arr = raw ? JSON.parse(raw) : [];
+      
+      // Prevent consecutive duplicates
+      if (arr.length > 0 && arr[0].content === item.content) {
+        return;
+      }
+
       arr.unshift({ ...item, timestamp: Date.now() });
       await AsyncStorage.setItem('scan_history', JSON.stringify(arr.slice(0, 50)));
     } catch {}
   };
 
   const onBarcodeScanned = async (ev) => {
-    const data = ev?.data ?? (Array.isArray(ev?.barcodes) ? ev.barcodes[0]?.data : undefined);
+    // Debug: Log full event structure to understand data format
+    console.log('[CodeScanScreen] Barcode event keys:', Object.keys(ev || {}));
+    console.log('[CodeScanScreen] Barcode event:', JSON.stringify(ev, null, 2));
+    
+    // Try multiple properties from different expo-camera versions
+    const barcode = Array.isArray(ev?.barcodes) ? ev.barcodes[0] : ev;
+    
+    // Check all possible data properties
+    const possibleData = [
+      barcode?.rawValue,
+      barcode?.data, 
+      barcode?.raw,
+      barcode?.value,
+      ev?.data,
+      ev?.rawValue,
+      ev?.raw,
+      ev?.value
+    ].find(d => d && typeof d === 'string' && d.length > 0);
+    
+    let data = typeof possibleData === 'string' ? possibleData.trim() : String(possibleData ?? '').trim();
+    
+    // Try URL decoding if data looks URL-encoded (contains %XX patterns)
+    if (data.includes('%')) {
+      try {
+        const decoded = decodeURIComponent(data);
+        console.log('[CodeScanScreen] URL decoded data:', decoded);
+        data = decoded;
+      } catch (e) {
+        console.log('[CodeScanScreen] URL decode failed, using original');
+      }
+    }
+    
+    console.log('[CodeScanScreen] All barcode props:', barcode ? Object.keys(barcode) : 'no barcode');
+    console.log('[CodeScanScreen] Extracted data:', data);
+    console.log('[CodeScanScreen] Data char codes (first 20):', data.substring(0, 20).split('').map(c => c.charCodeAt(0)));
+    
     if (!data) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -85,7 +137,19 @@ export default function CodeScanScreen({ navigation }) {
     } catch {}
 
     setLoading(true);
-    const res = classifyInput(data);
+    let scannedType = (ev?.barcodes?.[0]?.type || ev?.type || '').toString().toLowerCase();
+    
+    // Fallback: detect from length if type is missing
+    if (!scannedType || scannedType === '' || scannedType === '0') {
+       const digits = data.replace(/[^0-9]/g, '');
+       if (digits.length === 13) scannedType = 'ean13';
+       else if (digits.length === 8) scannedType = 'ean8';
+       else if (digits.length === 12) scannedType = 'upc_a';
+    }
+
+    console.log('[CodeScanScreen] Calling classifyInput with data:', data, 'scannedType:', scannedType);
+    const res = classifyInput(data, scannedType);
+    console.log('[CodeScanScreen] Classification result:', res.type, 'isUrl:', res.isUrl, 'normalized:', res.normalized);
     let updated = { ...res };
 
     // Uzaktan risk kontrolü (yalnızca URL ise)
@@ -100,7 +164,13 @@ export default function CodeScanScreen({ navigation }) {
         if (remote?.isRisky) {
           const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
           const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+          const files = remote?.foundInFiles || [];
           const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+          if (files.includes('usom')) {
+            reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
+          } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
+            reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+          }
           updated = { ...res, level: 'unsafe', reasons };
         }
       }
@@ -115,9 +185,20 @@ export default function CodeScanScreen({ navigation }) {
 
     setResult(updated);
     setShowCamera(false);
-    saveHistory({ content: updated.normalized, level: updated.level });
-    const country = detectGs1Country(data);
+    
+    const eligible = ['ean13', 'ean8', 'upc_a'];
+    const country = eligible.includes(scannedType) ? detectGs1Country(data, t) : null;
     setGs1Country(country);
+    
+    // WiFi şifreleri geçmişe kaydedilmesin
+    if (updated.type !== 'wifi') {
+      saveHistory({ 
+        content: updated.normalized, 
+        level: updated.level,
+        type: scannedType,
+        country: country
+      });
+    }
     setLoading(false);
   };
 
@@ -128,9 +209,38 @@ export default function CodeScanScreen({ navigation }) {
     setConfirmVisible(true);
   };
 
+  const openVirusTotal = async () => {
+    await openVirusTotalForResult(result);
+  };
+
   const shareText = async () => {
     if (!result?.normalized) return;
     try { await Share.share({ message: result.normalized }); } catch {}
+  };
+
+  const shareContentAsFile = async (filename, mime, content) => {
+    try {
+      if (Platform.OS === 'web') {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const uri = FileSystem.cacheDirectory + filename;
+      await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
+      const available = await Sharing.isAvailableAsync();
+      if (available) {
+        await Sharing.shareAsync(uri, { mimeType: mime });
+      } else {
+        await Share.share({ message: content });
+      }
+    } catch {}
   };
 
   const resetScan = () => {
@@ -151,7 +261,7 @@ export default function CodeScanScreen({ navigation }) {
   if (!permission?.granted) {
     const canAskAgain = permission?.canAskAgain !== false;
     return (
-      <View style={[styles.center, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}>
+      <View style={[styles.center, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}>
         <Ionicons name="camera-outline" size={64} color={dark ? '#3b4654' : '#8b98a5'} />
         <Text style={[styles.permissionText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
           {t('camera.permission.message')}
@@ -173,14 +283,14 @@ export default function CodeScanScreen({ navigation }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}>
-      {offline && (
-        <View style={styles.offlineBar}>
-          <Ionicons name="wifi" size={18} color={'#cf222e'} />
-          <Text style={styles.offlineText}>{t('alerts.offline')}</Text>
-        </View>
-      )}
-      <AdBanner placement="code_top" variant="banner" />
+    <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}>
+      <OfflineNotice
+        visible={offline}
+        dark={dark}
+        message={t('alerts.offline')}
+        onHeightChange={setOfflineNoticeHeight}
+      />
+      <View style={{ flex: 1, paddingTop: offline ? offlineNoticeHeight + 8 : 0 }}>
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={'#9ecaff'} />
@@ -234,7 +344,7 @@ export default function CodeScanScreen({ navigation }) {
           style={[
             styles.resultContainer, 
             { 
-              backgroundColor: dark ? '#0b0f14' : '#f2f6fb',
+              backgroundColor: dark ? '#0b0f14' : '#e9edf3',
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }]
             }
@@ -242,101 +352,359 @@ export default function CodeScanScreen({ navigation }) {
         >
           <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ paddingBottom: 24 }, compact ? { paddingHorizontal: 12 } : { paddingHorizontal: 20 }]}>
           <View style={[styles.resultHeader, compact ? { marginBottom: 16, gap: 12 } : null]}>
-            <Ionicons 
-              name={result.level === 'secure' ? 'shield-checkmark' : result.level === 'suspicious' ? 'warning' : 'shield'} 
-              size={compact ? 40 : 48} 
-              color={result.level === 'secure' ? '#2f9e44' : result.level === 'suspicious' ? '#ffb703' : '#d00000'} 
-            />
-            <RiskBadge level={result.level} />
+            {gs1Country && result.type !== 'wifi' ? (
+              <>
+                <Ionicons 
+                  name="barcode-outline" 
+                  size={compact ? 40 : 48} 
+                  color={dark ? '#e6edf3' : '#0b1220'} 
+                />
+                <View style={{alignItems: 'center', gap: 4}}>
+                  <View style={[styles.badge, { backgroundColor: dark ? '#1f6feb' : '#0969da' }]}> 
+                    <Ionicons name="scan-outline" size={16} color="#fff" />
+                    <Text style={styles.badgeText}>{t('scan.barcodeDetected') || 'Barkod Tespit Edildi'}</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: dark ? '#8b98a5' : '#5c6a7a', textAlign: 'center', maxWidth: 250 }}>
+                    {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Ionicons 
+                  name={result.level === 'secure' ? 'shield-checkmark' : result.level === 'suspicious' ? 'warning' : 'shield'} 
+                  size={compact ? 40 : 48} 
+                  color={result.level === 'secure' ? '#2f9e44' : result.level === 'suspicious' ? '#ffb703' : '#d00000'} 
+                />
+                <RiskBadge level={result.level} />
+              </>
+            )}
           </View>
 
           <View style={[styles.resultCard, compact ? { padding: 14, gap: 14 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#e5e9f0' }]}> 
-            <View style={styles.resultSection}>
-              <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
-                {result.isUrl ? t('label.url') : t('label.content')}
+            <View style={[styles.resultSection, { alignItems: 'center' }]}>
+              <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}
+              >
+                {result.isUrl ? (t('label.url') || 'URL') : (
+                  result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
+                  result.type === 'tel' ? (t('label.phone') || 'Telefon') :
+                  result.type === 'email' ? (t('label.email') || 'E‑posta') :
+                  result.type === 'sms' ? (t('label.sms') || 'SMS') :
+                  result.type === 'geo' ? (t('label.location') || 'Konum') :
+                  result.type === 'vcard' ? (t('label.contact') || 'Kişi') :
+                  result.type === 'event' ? (t('label.event') || 'Etkinlik') :
+                  (t('label.content') || 'İçerik')
+                )}
               </Text>
-              <Text style={[styles.linkText, compact ? { fontSize: 14, lineHeight: 22 } : null, { color: dark ? '#9ecaff' : '#0066cc' }]} numberOfLines={3} selectable>
+              <Text style={[styles.linkText, compact ? { fontSize: 14, lineHeight: 22 } : null, { color: dark ? '#9ecaff' : '#0066cc', textAlign: 'center' }]} numberOfLines={3} selectable>
                 {result.normalized}
               </Text>
             </View>
 
-            {gs1Country && (
-              <View style={[styles.resultSection, styles.countrySection]}>
-                <View style={styles.countryBadge}>
-                  <Ionicons name="flag" size={18} color={dark ? '#8b98a5' : '#5c6a7a'} />
-                  <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-                    {gs1Country}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {result.reasons?.length > 0 && (
-              <View style={styles.resultSection}>
-                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
-                  Tespit Edilen Riskler
-                </Text>
-                <View style={styles.reasonList}>
-                  {result.reasons.map((r, idx) => (
-                    <View key={idx} style={styles.reasonItem}>
-                      <View style={[styles.reasonDot, { backgroundColor: result.level === 'unsafe' ? '#d00000' : '#ffb703' }]} />
-                      <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>
-                        {t(r)}
+            {gs1Country && result.type !== 'wifi' && (
+              <View style={[styles.resultSection, styles.countrySection, { alignItems: 'center' }]}>
+                {gs1Country.key === 'country.israel' ? (
+                  <View style={[styles.countryBadge, { 
+                    backgroundColor: dark ? 'rgba(207,34,46,0.15)' : '#fff5f5', 
+                    borderColor: dark ? 'rgba(207,34,46,0.4)' : '#cf222e',
+                    borderWidth: 1,
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    paddingVertical: 12
+                  }]}>
+                     <View style={{ flexDirection: 'row', gap: 12, marginBottom: 4 }}>
+                      <Text style={{ fontSize: 32 }}>{gs1Country.flag}</Text>
+                    </View>
+                    <Text style={[styles.countryText, { color: dark ? '#ff7b72' : '#cf222e', fontWeight: '700', fontSize: 16 }]}>
+                       {gs1Country.name}
+                    </Text>
+                     <Text style={[styles.countryText, { color: dark ? '#ff7b72' : '#cf222e', fontSize: 13, marginTop: 4, textAlign: 'center' }]}>
+                      {t('scan.israelProduct') || 'Bu ürün İsrail\'de üretilmiştir.'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                      <Text style={[styles.countryText, { color: dark ? '#ff7b72' : '#cf222e', fontSize: 12, fontWeight: '700' }]}>
+                        #FreePalestine
+                      </Text>
+                      <Text style={[styles.countryText, { color: dark ? '#ff7b72' : '#cf222e', fontSize: 12, fontWeight: '700' }]}>
+                        #BoycottIsrael
                       </Text>
                     </View>
-                  ))}
+                  </View>
+                ) : (
+                  <View style={[styles.countryBadge, { alignSelf: 'center' }]}>
+                    <Text style={{ fontSize: 24 }}>{gs1Country.flag}</Text>
+                    <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+                      {t('scan.producedIn') || 'Üretim Yeri: '} {gs1Country.name}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {result.reasons?.length > 0 && result.isUrl && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
+                  {t('result.detectedRisks') || 'Tespit Edilen Riskler'}
+                </Text>
+                <View style={styles.reasonList}>
+                  {result.reasons.map((r, idx) => {
+                    if (typeof r === 'object' && r.type === 'usom') {
+                      const d = r.data;
+                      const usomInfo = getUsomInfo(d.threatType, i18n.language, d.description);
+                      return (
+                     <View key={idx} style={[styles.usomBlock, { backgroundColor: dark ? 'rgba(207,34,46,0.1)' : '#fff5f5', borderColor: dark ? 'rgba(207,34,46,0.3)' : '#ffcccc' }]}>
+                       <Text style={[styles.usomTitle, { color: dark ? '#ff7b72' : '#cf222e' }]}>{t('remoteRisk.usomTitle')}</Text>
+                       {usomInfo.title && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomTypeLabel')}</Text> {usomInfo.title}</Text>}
+                       {(usomInfo.desc || d.description) && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomDescLabel')}</Text> {usomInfo.desc || d.description}</Text>}
+                        {d.detectedDate && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomDateLabel')}</Text> {(() => {
+                          try {
+                            return new Date(d.detectedDate).toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                          } catch (e) {
+                            return d.detectedDate;
+                          }
+                        })()}</Text>}
+                        {d.url && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomUrlLabel')}</Text> {d.url}</Text>}
+                       {(d.ipAddress || d.ip) && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomIpLabel')}</Text> {d.ipAddress || d.ip}</Text>}
+                        <TouchableOpacity onPress={() => Linking.openURL('https://www.usom.gov.tr/adres')} style={{marginTop: 8}}>
+                          <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline', fontWeight: '500'}}>{t('remoteRisk.usomReference')}</Text>
+                        </TouchableOpacity>
+                      </View>
+                   );
+                 }
+                 if (typeof r === 'object' && r.type === 'github') {
+                   return (
+                     <View key={idx} style={[styles.usomBlock, { backgroundColor: dark ? 'rgba(210,153,34,0.1)' : '#fff8c5', borderColor: dark ? 'rgba(210,153,34,0.3)' : '#e3b341' }]}>
+                       <Text style={[styles.usomTitle, { color: dark ? '#d29922' : '#9a6700' }]}>{t('remoteRisk.githubTitle')}</Text>
+                       <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}>
+                         {t('remoteRisk.githubFoundText', { repo: r.repo })}
+                       </Text>
+                       <TouchableOpacity onPress={() => Linking.openURL(r.url)} style={{marginTop: 4}}>
+                          <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline'}}>{t('remoteRisk.viewSource')}</Text>
+                       </TouchableOpacity>
+                     </View>
+                   );
+                 }
+                    return (
+                      <View key={idx} style={styles.reasonItem}>
+                        <View style={[styles.reasonDot, { backgroundColor: result.level === 'unsafe' ? '#d00000' : '#ffb703' }]} />
+                        <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>
+                          {t(r)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {result.type === 'wifi' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.wifiDetails') || 'Wi‑Fi Detayları'}</Text>
+                <View style={{ gap: 6 }}>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('wifi.ssid') || 'SSID'}: {result?.wifi?.ssid || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('wifi.security') || 'Güvenlik'}: {result?.wifi?.security || '-'}</Text>
+                  {result?.wifi?.security !== 'nopass' && (
+                    <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('wifi.password') || 'Şifre'}: {result?.wifi?.password || '-'}</Text>
+                  )}
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('wifi.hidden') || 'Gizli'}: {result?.wifi?.hidden ? (t('confirm.yes') || 'Evet') : (t('confirm.no') || 'Hayır')}</Text>
+                </View>
+              </View>
+            )}
+
+            {result.type === 'tel' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.phone') || 'Telefon'}</Text>
+                <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{result?.tel?.number || '-'}</Text>
+              </View>
+            )}
+
+            {result.type === 'email' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.email') || 'E‑posta'}</Text>
+                <View style={{ gap: 6 }}>
+                <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('email.to') || 'Alıcı'}: {result?.email?.to || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('email.subject') || 'Konu'}: {result?.email?.subject || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('email.body') || 'İçerik'}: {result?.email?.body || '-'}</Text>
+                </View>
+              </View>
+            )}
+
+            {result.type === 'sms' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.sms') || 'SMS'}</Text>
+                <View style={{ gap: 6 }}>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('sms.number') || 'Numara'}: {result?.sms?.number || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('sms.body') || 'Mesaj'}: {result?.sms?.body || '-'}</Text>
+                </View>
+              </View>
+            )}
+
+            {result.type === 'vcard' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.contact') || 'Kişi'}</Text>
+                <View style={{ gap: 6 }}>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('contact.name') || 'Ad'}: {result?.vcard?.fn || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('contact.tel') || 'Tel'}: {result?.vcard?.tel || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('contact.email') || 'E‑posta'}: {result?.vcard?.email || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('contact.org') || 'Kurum'}: {result?.vcard?.org || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('contact.title') || 'Ünvan'}: {result?.vcard?.title || '-'}</Text>
+                </View>
+              </View>
+            )}
+
+            {result.type === 'event' && (
+              <View style={styles.resultSection}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>{t('label.event') || 'Etkinlik'}</Text>
+                <View style={{ gap: 6 }}>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('event.summary') || 'Başlık'}: {result?.event?.summary || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('event.location') || 'Konum'}: {result?.event?.location || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('event.dtstart') || 'Başlangıç'}: {result?.event?.dtstart || '-'}</Text>
+                  <Text style={[styles.reasonText, { color: dark ? '#c4cdd6' : '#3b4654' }]}>{t('event.dtend') || 'Bitiş'}: {result?.event?.dtend || '-'}</Text>
                 </View>
               </View>
             )}
           </View>
 
-          <View style={[styles.buttonGroup, compact ? { marginTop: 16 } : null]}>
-            {result.isUrl && (
-              <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.primaryBtn]} onPress={openLink}>
-                <Ionicons name="open-outline" size={22} color="#fff" />
-                <Text style={styles.actionBtnText}>{t('actions.openLink') || 'Linki Aç'}</Text>
-              </TouchableOpacity>
-            )}
-            {result?.normalized && (
-              <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.copyBtn]} onPress={async () => {
-                try { await Clipboard.setStringAsync(result.normalized); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {}
-              }}>
-                <Ionicons name="copy" size={22} color="#fff" />
-                <Text style={styles.actionBtnText}>{t('actions.copy') || 'Kopyala'}</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.secondaryBtn]} onPress={shareText}>
-              <Ionicons name="share-outline" size={22} color="#fff" />
-              <Text style={styles.actionBtnText}>{t('actions.share') || 'Paylaş'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, compact ? { paddingVertical: 12 } : null, styles.vtBtn]} onPress={() => {
-              try {
-                const raw = result?.normalized || '';
-                const fixed = raw.startsWith('http') ? raw : 'https://' + raw;
-                const u = new URL(fixed);
-                const domain = u.hostname;
-                const vt = 'https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain);
-                setPendingUrl(vt);
-                setConfirmVisible(true);
-              } catch {
-                const raw = result?.normalized || '';
-                const domain = raw.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
-                const vt = 'https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain);
-                setPendingUrl(vt);
-                setConfirmVisible(true);
-              }
-            }}>
-              <Ionicons name="search-outline" size={22} color="#fff" />
-              <Text style={styles.actionBtnText}>{t('actions.analyzeVirusTotal') || 'VirusTotal'}</Text>
-            </TouchableOpacity>
-          </View>
+          <ActionButtonsGrid
+            compact={compact}
+            style={{ marginTop: 15 }}
+            buttons={
+              result.type === 'wifi'
+                ? [
+                    {
+                      key: 'copy_wifi',
+                      label: t('actions.copyWifiPassword') || 'Wi‑Fi Şifresini Kopyala',
+                      icon: 'key-outline',
+                      onPress: async () => {
+                        const pwd = result?.wifi?.password || '';
+                        if (!pwd) return;
+                        try { await Clipboard.setStringAsync(pwd); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {}
+                      },
+                      color: '#0f766e',
+                    },
+                    {
+                      key: 'share_wifi',
+                      label: t('actions.share') || 'Şifreyi Paylaş',
+                      icon: 'share-outline',
+                      onPress: async () => {
+                        const pwd = result?.wifi?.password || '';
+                        if (!pwd) return;
+                        try { await Share.share({ message: pwd }); } catch {}
+                      },
+                      color: '#6c5ce7',
+                    },
+                  ]
+                : [
+                    result.isUrl && {
+                      key: 'open',
+                      label: t('actions.openLink') || 'Linki Aç',
+                      icon: 'open-outline',
+                      onPress: openLink,
+                      color: '#2f9e44',
+                    },
+                    result?.normalized && {
+                      key: 'copy',
+                      label: t('actions.copy') || 'Kopyala',
+                      icon: 'copy',
+                      onPress: async () => {
+                        try { await Clipboard.setStringAsync(result.normalized); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {}
+                      },
+                      color: '#0969da',
+                    },
+                    gs1Country && {
+                      key: 'google',
+                      label: t('actions.searchGoogle') || 'Google\'da Ara',
+                      icon: 'logo-google',
+                      onPress: () => {
+                        const url = 'https://www.google.com/search?q=' + encodeURIComponent(result.normalized);
+                        openExternalUrl(url);
+                      },
+                      color: '#0bd920e4',
+                    },
+                    {
+                      key: 'share',
+                      label: t('actions.share') || 'Paylaş',
+                      icon: 'share-outline',
+                      onPress: shareText,
+                      color: '#6c5ce7',
+                    },
+                    result.isUrl && {
+                      key: 'vt',
+                      label: t('actions.analyzeVirusTotal') || 'VirusTotal',
+                      icon: 'search-outline',
+                      onPress: openVirusTotal,
+                      color: '#8250df',
+                    },
+                    result.type === 'tel' && {
+                      key: 'tel',
+                      label: t('actions.call') || 'Ara',
+                      icon: 'call-outline',
+                      onPress: () => {
+                        const num = result?.tel?.number || '';
+                        if (!num) return;
+                        Linking.openURL(`tel:${num}`).catch(() => {});
+                      },
+                      color: '#2f9e44',
+                    },
+                    result.type === 'email' && {
+                      key: 'email',
+                      label: t('actions.composeEmail') || 'E‑posta Oluştur',
+                      icon: 'mail-outline',
+                      onPress: () => openExternalUrl(result.normalized),
+                      color: '#2f9e44',
+                    },
+                    result.type === 'sms' && {
+                      key: 'sms',
+                      label: t('actions.composeSms') || 'SMS Oluştur',
+                      icon: 'chatbubble-outline',
+                      onPress: () => openExternalUrl(result.normalized),
+                      color: '#2f9e44',
+                    },
+                    result.type === 'geo' && {
+                      key: 'geo',
+                      label: t('actions.openMap') || 'Haritada Aç',
+                      icon: 'map-outline',
+                      onPress: () => {
+                        const lat = result?.geo?.lat;
+                        const lon = result?.geo?.lon;
+                        if (typeof lat === 'number' && typeof lon === 'number') {
+                          const url = `https://maps.google.com/?q=${lat},${lon}`;
+                          openExternalUrl(url);
+                        }
+                      },
+                      color: '#2f9e44',
+                    },
+                    result.type === 'vcard' && {
+                      key: 'vcard',
+                      label: t('actions.shareVcf') || 'VCF Paylaş',
+                      icon: 'person-add-outline',
+                      onPress: () => {
+                        const content = result?.normalized || '';
+                        if (!content) return;
+                        shareContentAsFile('contact.vcf', 'text/vcard', content);
+                      },
+                      color: '#2f9e44',
+                    },
+                    result.type === 'event' && {
+                      key: 'event',
+                      label: t('actions.shareIcs') || 'ICS Paylaş',
+                      icon: 'calendar-outline',
+                      onPress: () => {
+                        const content = result?.normalized || '';
+                        if (!content) return;
+                        shareContentAsFile('event.ics', 'text/calendar', content);
+                      },
+                      color: '#2f9e44',
+                    },
+                  ]
+            }
+          />
 
           <View style={[styles.bottomActions, compact ? { marginTop: 12 } : null]}>
             <TouchableOpacity style={[styles.bottomBtn, { backgroundColor: dark ? '#1b2330' : '#e5e9f0' }]} onPress={resetScan}>
               <Ionicons name="scan-outline" size={20} color={dark ? '#e6edf3' : '#0b1220'} />
               <Text style={[styles.bottomBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-                Yeniden Tara
+                {t('actions.rescan') || 'Yeniden Tara'}
               </Text>
             </TouchableOpacity>
             
@@ -344,7 +712,7 @@ export default function CodeScanScreen({ navigation }) {
               <TouchableOpacity style={[styles.bottomBtn, { backgroundColor: dark ? '#1b2330' : '#e5e9f0' }]} onPress={goToHome}>
                 <Ionicons name="home-outline" size={20} color={dark ? '#e6edf3' : '#0b1220'} />
                 <Text style={[styles.bottomBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-                  Ana Menü
+                  {t('actions.mainMenu') || 'Ana Menü'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -352,9 +720,15 @@ export default function CodeScanScreen({ navigation }) {
           </ScrollView>
         </Animated.View>
       )}
-      <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(139,152,165,0.2)', padding: 8 }}>
-        <AdBanner placement="global_footer" />
-      </View>
+      {showCamera ? (
+        <View style={styles.cameraAdOverlay}>
+          <AdBanner placement="global_footer" isFooter />
+        </View>
+      ) : (
+        <View style={{ padding: 0 }}>
+          <AdBanner placement="global_footer" isFooter />
+        </View>
+      )}
       <ConfirmOpenLinkModal
         visible={confirmVisible}
         url={pendingUrl}
@@ -365,7 +739,14 @@ export default function CodeScanScreen({ navigation }) {
         }}
         onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
       />
-      <Toast visible={toastVisible} message={toastMsg} onHide={() => setToastVisible(false)} dark={dark} />
+      <Toast
+        visible={toastVisible}
+        message={toastMsg}
+        onHide={() => setToastVisible(false)}
+        dark={dark}
+        style={{ position: 'absolute', bottom: Math.max(insets.bottom + 72, 72), left: 20, right: 20 }}
+      />
+      </View>
     </View>
   );
 }
@@ -394,131 +775,6 @@ function RiskBadge({ level }) {
   );
 }
 
-function detectGs1Country(raw) {
-  const digits = String(raw).replace(/[^0-9]/g, '');
-  if (digits.length < 8) return null;
-  const prefix = parseInt(digits.slice(0, 3), 10);
-  if (Number.isNaN(prefix)) return null;
-
-  const ranges = [
-    [[1, 19], 'Amerika Birleşik Devletleri'],
-    [[30, 39], 'Amerika Birleşik Devletleri'],
-    [[60, 99], 'Amerika Birleşik Devletleri'],
-    [[100, 139], 'Amerika Birleşik Devletleri'],
-    [[300, 379], 'Fransa & Monako'],
-    [[380, 380], 'Bulgaristan'],
-    [[383, 383], 'Slovenya'],
-    [[385, 385], 'Hırvatistan'],
-    [[387, 387], 'Bosna-Hersek'],
-    [[389, 389], 'Karadağ'],
-    [[400, 440], 'Almanya'],
-    [[450, 459], 'Japonya'],
-    [[460, 469], 'Rusya'],
-    [[471, 471], 'Tayvan'],
-    [[474, 474], 'Estonya'],
-    [[475, 475], 'Letonya'],
-    [[476, 476], 'Azerbaycan'],
-    [[477, 477], 'Litvanya'],
-    [[478, 478], 'Özbekistan'],
-    [[479, 479], 'Sri Lanka'],
-    [[480, 480], 'Filipinler'],
-    [[481, 481], 'Belarus'],
-    [[482, 482], 'Ukrayna'],
-    [[483, 483], 'Türkmenistan'],
-    [[484, 484], 'Moldova'],
-    [[485, 485], 'Ermenistan'],
-    [[486, 486], 'Gürcistan'],
-    [[487, 487], 'Kazakistan'],
-    [[488, 488], 'Tacikistan'],
-    [[489, 489], 'Hong Kong'],
-    [[490, 499], 'Japonya'],
-    [[500, 509], 'Birleşik Krallık'],
-    [[520, 521], 'Yunanistan'],
-    [[528, 528], 'Lübnan'],
-    [[529, 529], 'Kıbrıs'],
-    [[530, 530], 'Arnavutluk'],
-    [[531, 531], 'Kuzey Makedonya'],
-    [[535, 535], 'Malta'],
-    [[539, 539], 'İrlanda'],
-    [[540, 549], 'Belçika & Lüksemburg'],
-    [[560, 560], 'Portekiz'],
-    [[569, 569], 'İzlanda'],
-    [[570, 579], 'Danimarka'],
-    [[590, 590], 'Polonya'],
-    [[594, 594], 'Romanya'],
-    [[599, 599], 'Macaristan'],
-    [[600, 601], 'Güney Afrika'],
-    [[608, 608], 'Bahreyn'],
-    [[611, 611], 'Fas'],
-    [[613, 613], 'Cezayir'],
-    [[616, 616], 'Kenya'],
-    [[619, 619], 'Tunus'],
-    [[621, 621], 'Suriye'],
-    [[622, 622], 'Mısır'],
-    [[624, 624], 'Libya'],
-    [[625, 625], 'Ürdün'],
-    [[626, 626], 'İran'],
-    [[627, 627], 'Kuveyt'],
-    [[628, 628], 'Suudi Arabistan'],
-    [[629, 629], 'Birleşik Arap Emirlikleri'],
-    [[640, 649], 'Finlandiya'],
-    [[680, 681], 'Çin'],
-    [[690, 699], 'Çin'],
-    [[700, 709], 'Norveç'],
-    [[729, 729], 'İsrail'],
-    [[730, 739], 'İsveç'],
-    [[740, 740], 'Guatemala'],
-    [[741, 741], 'El Salvador'],
-    [[742, 742], 'Honduras'],
-    [[743, 743], 'Nikaragua'],
-    [[744, 744], 'Kosta Rika'],
-    [[745, 745], 'Panama'],
-    [[746, 746], 'Dominik Cumhuriyeti'],
-    [[750, 750], 'Meksika'],
-    [[754, 755], 'Kanada'],
-    [[759, 759], 'Venezuela'],
-    [[760, 769], 'İsviçre & Lihtenştayn'],
-    [[770, 771], 'Kolombiya'],
-    [[773, 773], 'Uruguay'],
-    [[775, 775], 'Peru'],
-    [[777, 777], 'Bolivya'],
-    [[778, 779], 'Arjantin'],
-    [[780, 780], 'Şili'],
-    [[784, 784], 'Paraguay'],
-    [[786, 786], 'Ekvador'],
-    [[789, 790], 'Brezilya'],
-    [[800, 839], 'İtalya'],
-    [[840, 849], 'İspanya & Andorra'],
-    [[850, 850], 'Küba'],
-    [[858, 858], 'Slovakya'],
-    [[859, 859], 'Çek Cumhuriyeti'],
-    [[860, 860], 'Sırbistan'],
-    [[865, 865], 'Moğolistan'],
-    [[867, 867], 'Kuzey Kore'],
-    [[868, 869], 'Türkiye'],
-    [[870, 879], 'Hollanda'],
-    [[880, 881], 'Güney Kore'],
-    [[883, 883], 'Myanmar'],
-    [[884, 884], 'Kamboçya'],
-    [[885, 885], 'Tayland'],
-    [[888, 888], 'Singapur'],
-    [[890, 890], 'Hindistan'],
-    [[893, 893], 'Vietnam'],
-    [[894, 894], 'Bangladeş'],
-    [[896, 896], 'Pakistan'],
-    [[899, 899], 'Endonezya'],
-    [[900, 919], 'Avusturya'],
-    [[930, 939], 'Avustralya'],
-    [[940, 949], 'Yeni Zelanda'],
-    [[955, 955], 'Malezya'],
-    [[958, 958], 'Makao'],
-  ];
-
-  for (const [[from, to], name] of ranges) {
-    if (prefix >= from && prefix <= to) return name;
-  }
-  return null;
-}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
@@ -537,28 +793,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     fontWeight: '600'
-  },
-  offlineBar: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    zIndex: 60,
-    borderWidth: 1,
-    borderColor: 'rgba(207,34,46,0.25)',
-    backgroundColor: 'rgba(207,34,46,0.1)',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  offlineText: {
-    color: '#cf222e',
-    fontSize: 13,
-    fontWeight: '700',
-    flex: 1,
   },
   camera: { flex: 1 },
   overlay: {
@@ -627,16 +861,16 @@ const styles = StyleSheet.create({
   },
   resultContainer: { 
     flex: 1, 
-    padding: 20,
+    padding: 2,
     justifyContent: 'center',
   },
   resultHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 8,
     gap: 16,
   },
   resultCard: { 
-    padding: 20, 
+    padding: 15, 
     gap: 20, 
     borderWidth: 1, 
     borderRadius: 16,
@@ -716,9 +950,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  usomBlock: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginVertical: 0,
+    gap: 4,
+  },
+  usomTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  usomText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
   buttonGroup: { 
     gap: 12,
-    marginTop: 24,
+    marginTop: 15,
   },
   actionBtn: { 
     flexDirection: 'row', 
@@ -741,6 +992,9 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     backgroundColor: '#6c5ce7',
+  },
+  googleBtn: {
+    backgroundColor: '#0bd920e4',//#ff6b6b'
   },
   vtBtn: {
     backgroundColor: '#8250df',

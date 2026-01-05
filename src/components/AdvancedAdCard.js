@@ -3,14 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from './AdBanner';
-import { adUnits } from '../config/adUnits';
+import { nativeUnitId } from '../config/adUnitIds';
 
 export default function AdvancedAdCard({ placement, large = false }) {
   const { dark } = useAppTheme();
   const [premium, setPremium] = useState(false);
   const [nativeMod, setNativeMod] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [online, setOnline] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -32,27 +30,9 @@ export default function AdvancedAdCard({ placement, large = false }) {
     return () => { mounted = false; };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const ping = async () => {
-      try {
-        const ctl = new AbortController();
-        const t = setTimeout(() => ctl.abort(), 2500);
-        const res = await fetch('https://clients3.google.com/generate_204', { signal: ctl.signal });
-        clearTimeout(t);
-        if (active) setOnline(res?.status === 204 || (res?.ok === true));
-      } catch {
-        if (active) setOnline(false);
-      }
-    };
-    ping();
-    const id = setInterval(ping, 15000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  if (premium) return null;
 
-  if (premium || !online) return null;
-
-  if (!nativeMod || failed) {
+  if (!nativeMod) {
     return <AdBanner placement={placement} variant="mrec" />;
   }
 
@@ -70,8 +50,6 @@ export default function AdvancedAdCard({ placement, large = false }) {
     return <AdBanner placement={placement} variant="mrec" />;
   }
 
-  const nativeUnitId = adUnits.NATIVE;
-
   const mediaHeight = large ? 240 : 180;
   const cardPadding = large ? 16 : 12;
   const cardGap = large ? 12 : 10;
@@ -81,8 +59,6 @@ export default function AdvancedAdCard({ placement, large = false }) {
   return (
     <NativeAdView
       adUnitID={nativeUnitId}
-      onAdFailedToLoad={() => setFailed(true)}
-      onAdLoaded={() => setFailed(false)}
       style={[styles.card, { padding: cardPadding, gap: cardGap, backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}
     >
       <View style={styles.rowTop}>

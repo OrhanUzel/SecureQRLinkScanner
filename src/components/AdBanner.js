@@ -1,142 +1,111 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../theme/ThemeContext';
-import { adUnits } from '../config/adUnits';
+import { bannerUnitId } from '../config/adUnitIds';
 
-export default function AdBanner({ placement, variant }) {
+export default function AdBanner({ placement, variant, isFooter = false }) {
   const { dark } = useAppTheme();
-  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  
+  // 1. İYİLEŞTİRME: Yükleniyor durumu eklendi
+  const [loading, setLoading] = useState(true);
   const [premium, setPremium] = useState(false);
   const [admod, setAdmod] = useState(null);
-  const { width } = useWindowDimensions();
-  const [online, setOnline] = useState(true);
+  const [failed, setFailed] = useState(false);
 
+  // Premium Kontrolü
   useEffect(() => {
     (async () => {
       try {
         const v = await AsyncStorage.getItem('premium');
         setPremium(v === 'true');
-      } catch {}
+      } catch (e) {
+        console.log('Premium check failed:', e);
+      } finally {
+        // 2. İYİLEŞTİRME: İşlem bitince (başarılı veya hatalı) yüklemeyi durdur
+        setLoading(false);
+      }
     })();
   }, []);
 
+  // AdMob Kütüphanesini Dinamik Yükleme
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const mod = await import('react-native-google-mobile-ads');
         if (mounted) setAdmod(mod);
-      } catch {}
+      } catch (e) {
+        console.log('AdMob import failed:', e);
+      }
     })();
     return () => { mounted = false; };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const ping = async () => {
-      try {
-        const ctl = new AbortController();
-        const t = setTimeout(() => ctl.abort(), 2500);
-        const res = await fetch('https://clients3.google.com/generate_204', { signal: ctl.signal });
-        clearTimeout(t);
-        if (active) setOnline(res?.status === 204 || (res?.ok === true));
-      } catch {
-        if (active) setOnline(false);
-      }
-    };
-    ping();
-    const id = setInterval(ping, 15000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
-
-  if (premium || !online) return null;
-
-  const unitId = adUnits.BANNER;
+  // 3. İYİLEŞTİRME: Henüz kontrol bitmediyse veya kullanıcı premium ise gösterme
+  if (loading || premium) return null;
 
   const useMrec = variant === 'mrec';
-  const useBanner = variant === 'banner';
-  const bannerSize = useMrec
-    ? admod?.BannerAdSize?.MEDIUM_RECTANGLE
-    : (useBanner ? admod?.BannerAdSize?.BANNER : admod?.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER);
+  // Admod yüklenmemişse hata vermemesi için opsiyonel zincirleme (?.) kullanımı
+  const bannerSize = useMrec 
+    ? admod?.BannerAdSize?.MEDIUM_RECTANGLE 
+    : admod?.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER;
+
+  // Reklam kütüphanesi hazır değilse, ID yoksa veya yükleme hatası aldıysa gösterme
+  if (!admod || !bannerUnitId || failed) return null;
+
+  // Footer ise alt güvenli alanı hesaba kat
+  const bottomPadding = isFooter ? Math.max(insets.bottom, 8) : 0;
 
   return (
-    <View style={admod ? [useMrec ? styles.mrecWrap : styles.adWrap, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }] : [styles.wrap, { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }] }>
-      {admod && typeof unitId === 'string' && unitId ? (
-        <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
-          <admod.BannerAd
-            unitId={unitId}
-            size={bannerSize}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
-        </View>
-      ) : (
-        <View style={styles.row}>
-          <Text style={[styles.label, { color: dark ? '#8b949e' : '#57606a' }]}>Sponsorlu alan</Text>
-          <TouchableOpacity 
-            style={[styles.cta, { backgroundColor: dark ? '#7c3aed' : '#7c3aed' }]}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('Premium')}
-          >
-            <Text style={styles.ctaText}>Reklamları kaldır</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+    <View 
+      style={[
+        useMrec ? styles.mrecWrap : styles.adWrap, 
+        isFooter && { paddingBottom: bottomPadding }
+      ]}
+    >
+      <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
+        <admod.BannerAd
+          unitId={bannerUnitId}
+          size={bannerSize}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          onAdFailedToLoad={(err) => {
+            console.log('AdBanner failed to load:', err);
+            setFailed(true); // Hata alınca alanı tamamen gizle
+          }}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2
-  },
+
   adWrap: {
-    marginTop: 12,
+    marginTop: 2,  
     width: '100%'
   },
+
   adContainer: {
     width: '100%',
     alignItems: 'center',
     overflow: 'hidden'
   },
+
   mrecWrap: {
     marginTop: 12,
     width: '100%',
     alignItems: 'center'
   },
+
   mrecContainer: {
     width: 300,
     height: 250,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center'
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  cta: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999
-  },
-  ctaText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 12
   }
+
 });

@@ -1,18 +1,34 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, FlatList, Platform, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
 import AdBanner from '../components/AdBanner';
-import AdvancedAdCard from '../components/AdvancedAdCard';
-import { adUnits } from '../config/adUnits';
+import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from '../config/adUnitIds';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ScanSelectScreen({ navigation }) {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
+  const insets = useSafeAreaInsets();
+  const [premium, setPremium] = useState(false);
+
+  const loadPremiumFlag = useCallback(async () => {
+    try {
+      const flag = await AsyncStorage.getItem('premium');
+      setPremium(flag === 'true');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadPremiumFlag();
+    const unsubscribe = navigation.addListener?.('focus', loadPremiumFlag);
+    return () => { unsubscribe?.(); };
+  }, [navigation, loadPremiumFlag]);
 
   const scanOptions = [
     {
@@ -28,12 +44,12 @@ export default function ScanSelectScreen({ navigation }) {
     {
       id: 'code',
       route: 'CodeScan',
-      icon: 'qr-code',
-      colors: dark ? ['#1a4d2e', '#22c55e'] : ['#10b981', '#34d399'],
+      icon: 'qr-code',//'#1a4d2e', '#22c55e'
+      colors: dark ? ['#149e4bff', '#1fcd5eff'] : ['#10b981', '#34d399'],
       iconColor: dark ? '#b9f3b6' : '#ffffff',
       title: t('scan.code'),
       description: t('scan.code.description'),
-      emoji: '📱'
+      emoji: '⛶'//'📱'
     },
     {
       id: 'image',
@@ -64,8 +80,8 @@ export default function ScanSelectScreen({ navigation }) {
     {
       id: 'history',
       route: 'History',
-      icon: 'time-outline',
-      colors: dark ? ['#243044', '#0ea5e9'] : ['#38bdf8', '#60a5fa'],
+      icon: 'time-outline',//'#58c629ac', '#55f480ff'
+      colors: dark ? ['#149e4bff', '#1fcd5eff'] : ['#38bdf8', '#60a5fa'],
       iconColor: dark ? '#9ecaff' : '#ffffff',
       title: t('history.title'),
       description: t('history.description'),
@@ -74,8 +90,8 @@ export default function ScanSelectScreen({ navigation }) {
     {
       id: 'settings',
       route: 'Settings',
-      icon: 'settings-outline',
-      colors: dark ? ['#3b2c52', '#7c3aed'] : ['#a78bfa', '#c4b5fd'],
+      icon: 'settings-outline',//#3b2c52//'#0a29f2ff', '#09a1d3ff'
+      colors: dark ? ['#1a4d8f', '#2563eb'] : ['#592ae9ff', '#7d62ebff'],
       iconColor: dark ? '#c1b6ff' : '#ffffff',
       title: t('settings.title'),
       description: t('settings.description'),
@@ -84,9 +100,9 @@ export default function ScanSelectScreen({ navigation }) {
   );
 
   const ADS = {
-    REWARDED_INTERSTITIAL: adUnits.REWARDED_INTERSTITIAL,
-    REWARDED: adUnits.REWARDED,
-    INTERSTITIAL: adUnits.INTERSTITIAL,
+    REWARDED_INTERSTITIAL: rewardedInterstitialUnitId,
+    REWARDED: rewardedUnitId,
+    INTERSTITIAL: interstitialUnitId,
   };
 
   const runHistoryGate = async () => {
@@ -142,16 +158,21 @@ export default function ScanSelectScreen({ navigation }) {
 
   return (
     <View 
-      style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
+      style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}
     >
 
 
       
-      
       {/* Header removed per request */}
 
       {/* Scan Options Grid */}
-      <View style={[styles.grid, compact ? { paddingHorizontal: 8 } : null]}>
+      <View
+        style={[
+          styles.grid,
+          compact ? { paddingHorizontal: 8 } : null,
+          { paddingBottom: premium ? Math.max(insets.bottom, 20) : 0 }
+        ]}
+      >
         <FlatList
           data={scanOptions}
           keyExtractor={(item) => item.id}
@@ -167,7 +188,8 @@ export default function ScanSelectScreen({ navigation }) {
               compact={compact}
               onPress={async () => {
                 if (item.id === 'history') {
-                  try { await runHistoryGate(); } catch {}
+                  navigation.navigate('History');
+                  return;
                 }
                 navigation.navigate(
                   item.route,
@@ -183,12 +205,11 @@ export default function ScanSelectScreen({ navigation }) {
       {/* Quick Stats removed per request */}
 
       {/* Footer */}
-      <AdvancedAdCard placement="home" />
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
-          {t('scan.footer.text')}
-        </Text>
-      </View>
+      {!premium && (
+        <View style={[styles.bottomBanner, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', paddingBottom: Math.max(insets.bottom, 8) }]}> 
+                <AdBanner placement="settings"  />
+              </View>
+      )}
     </View>
   );
 }
@@ -289,8 +310,8 @@ function RiskBadge({ level }) {
 const styles = StyleSheet.create({
   container: { 
     flex: 1,
-    padding: 20,
-    paddingBottom: 20
+    padding: 0,
+    paddingBottom: 0
   },
   header: {
     marginBottom: 24,
@@ -341,8 +362,9 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   grid: { 
+    padding: 20,
     flex: 1,
-    marginBottom: 12,
+    marginBottom: 0,
     justifyContent: 'center',
     alignItems: 'center'
   },
@@ -437,7 +459,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    paddingTop: 8
+    paddingTop: 0
   },
   footerText: {
     fontSize: 12,
@@ -456,5 +478,9 @@ const styles = StyleSheet.create({
   badgeText: { 
     color: '#fff', 
     fontWeight: '700' 
+  },
+  bottomBannerWrap: {
+    padding: 0,
+    width: '100%'
   }
 });

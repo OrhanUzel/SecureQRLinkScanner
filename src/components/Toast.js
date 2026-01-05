@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, Text, StyleSheet } from 'react-native';
 
-export default function Toast({ visible, message, type = 'success', onHide, dark }) {
+export default function Toast({ visible, message, type = 'success', onHide, dark, style }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
 
@@ -35,7 +35,7 @@ export default function Toast({ visible, message, type = 'success', onHide, dark
     : (dark ? '#ff6b6b' : '#842029');
 
   return (
-    <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}> 
+    <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }, style]}> 
       <View style={[styles.toast, { backgroundColor: bg, borderColor: border }]}> 
         <Text style={[styles.text, { color }]}>{message}</Text>
       </View>

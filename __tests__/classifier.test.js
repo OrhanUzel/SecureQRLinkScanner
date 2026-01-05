@@ -40,4 +40,17 @@ describe('classifier', () => {
     expect(res.level).toBe('unsafe');
     expect(res.reasons).toEqual(expect.arrayContaining(['classifier.blacklistWarning']));
   });
+
+  test('barcode is not classified as phone when type is provided', () => {
+    const barcode = '8690637996324';
+    
+    // Without type, it is treated as a phone number because it's all digits
+    const resWithoutType = classifyInput(barcode);
+    expect(resWithoutType.type).toBe('tel');
+
+    // With type, it should be treated as plain content (or whatever default is)
+    const resWithType = classifyInput(barcode, 'ean13');
+    expect(resWithType.type).not.toBe('tel');
+    expect(resWithType.normalized).toBe(barcode);
+  });
 });

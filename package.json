@@ -1,6 +1,6 @@
 {
   "name": "secure-qr-link-scanner",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -9,33 +9,48 @@
     "web": "expo start --web",
     "test": "jest"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "@react-native-ml-kit/barcode-scanning",
+          "react-native-admob-native-ads"
+        ]
+      }
+    }
+  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-ml-kit/barcode-scanning": "^2.0.0",
     "@react-navigation/native": "^7.1.18",
     "@react-navigation/native-stack": "^7.5.1",
-    "expo": "~54.0.25",
+    "expo": "~54.0.30",
     "expo-asset": "^12.0.9",
-    "expo-blur": "^15.0.7",
-    "expo-camera": "^17.0.8",
-    "expo-clipboard": "^8.0.7",
+    "expo-blur": "~15.0.8",
+    "expo-build-properties": "~1.0.10",
+    "expo-camera": "~17.0.10",
+    "expo-clipboard": "~8.0.8",
     "expo-file-system": "~19.0.17",
     "expo-font": "~14.0.9",
-    "expo-haptics": "^15.0.7",
-    "expo-image-picker": "^17.0.8",
-    "expo-linear-gradient": "~15.0.7",
-    "expo-linking": "~8.0.9",
-    "expo-media-library": "^18.2.0",
-    "expo-secure-store": "^15.0.7",
-    "expo-sharing": "^14.0.7",
-    "expo-status-bar": "~3.0.8",
+    "expo-haptics": "~15.0.8",
+    "expo-image-manipulator": "^14.0.8",
+    "expo-image-picker": "~17.0.10",
+    "expo-linear-gradient": "~15.0.8",
+    "expo-linking": "~8.0.11",
+    "expo-localization": "^17.0.8",
+    "expo-media-library": "~18.2.1",
+    "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8",
+    "expo-status-bar": "~3.0.9",
     "i18next": "^25.6.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-i18next": "^16.2.0",
     "react-native": "0.81.5",
     "react-native-admob-native-ads": "^0.7.6",
+    "react-native-color-picker": "^0.6.0",
+    "react-native-config": "^1.6.1",
     "react-native-google-mobile-ads": "^16.0.0",
     "react-native-iap": "^14.4.45",
     "react-native-nitro-modules": "^0.31.9",
@@ -43,8 +58,7 @@
     "react-native-screens": "~4.16.0",
     "react-native-view-shot": "^4.0.3",
     "react-native-web": "^0.21.0",
-    "react-native-webview": "13.15.0",
-    "expo-build-properties": "~1.0.9"
+    "react-native-webview": "13.15.0"
   },
   "overrides": {
     "expo-image-loader": "6.0.0"

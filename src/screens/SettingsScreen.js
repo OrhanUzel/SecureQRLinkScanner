@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
-import { setLanguage } from '../i18n';
+import { setLanguage, LANGUAGE_KEY } from '../i18n';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
-import AdvancedAdCard from '../components/AdvancedAdCard';
 import AdBanner from '../components/AdBanner';
 import Toast from '../components/Toast';
+import appConfig from '../../app.config'; // app.json'dan sürüm bilgisi
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -31,10 +32,18 @@ export default function SettingsScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadSettings();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     let mounted = true;
@@ -80,7 +89,7 @@ export default function SettingsScreen() {
   const loadSettings = async () => {
     try {
       const [savedLang, savedTheme, consent, premiumFlag] = await Promise.all([
-        AsyncStorage.getItem('language'),
+        AsyncStorage.getItem(LANGUAGE_KEY),
         AsyncStorage.getItem('theme'),
         getConsentInfo(),
         AsyncStorage.getItem('premium')
@@ -99,7 +108,6 @@ export default function SettingsScreen() {
 
   const onLang = async (lng) => {
     try {
-      await AsyncStorage.setItem('language', lng);
       setLanguage(lng);
     } catch (error) {
       console.error('Dil kaydedilirken hata:', error);
@@ -223,20 +231,19 @@ export default function SettingsScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb', justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ color: dark ? '#e6edf3' : '#0b1220' }}>{t('common.loading')}</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }]}
-      contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
-      showsVerticalScrollIndicator={false}
-    >
-      <AdBanner placement="settings_top" />
-      
+    <View style={[styles.page, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}
+        contentContainerStyle={[styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null]}
+        showsVerticalScrollIndicator={false}
+      >
  
       {/* Premium */}
       <View style={styles.section}>
@@ -320,6 +327,8 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+     
+
        {/* Dil Seçimi */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -391,6 +400,16 @@ export default function SettingsScreen() {
         <Text style={styles.disclaimerText}>{t('settings.disclaimer')}</Text>
       </TouchableOpacity>
 
+      {/* Onboarding Button */}
+      <TouchableOpacity 
+        style={[styles.disclaimerBtn, { backgroundColor: dark ? '#2da44e' : '#2f9e44', marginTop: 12 }]} 
+        onPress={() => navigation.navigate('Onboarding')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.disclaimerIcon}>🎓</Text>
+        <Text style={styles.disclaimerText}>{t('settings.onboarding')}</Text>
+      </TouchableOpacity>
+
       {/* Consent Info */}
       {consentInfo && (
         <View style={[styles.section, { marginTop: 20 }]}> 
@@ -417,22 +436,27 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      <AdvancedAdCard placement="settings" />
-      <View style={{ borderTopWidth: 1, borderTopColor: dark ? '#30363d' : '#e1e4e8', padding: 8 }}>
-        <AdBanner placement="global_footer" />
-      </View>
+      
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
-          {t('settings.version')} 1.0.0
+          {t('settings.version')}: {appConfig?.expo?.version ?? '—'}
         </Text>
       </View>
       <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} />
-    </ScrollView>
+      </ScrollView>
+
+      <View style={[styles.bottomBanner, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', paddingBottom: Math.max(insets.bottom, 8) }]}> 
+        <AdBanner placement="settings"  />
+      </View>
+    </View>  
   );
 }
 
 const styles = StyleSheet.create({
+  page: {
+    flex: 1
+  },
   container: { 
     flex: 1 
   },
@@ -569,5 +593,13 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     fontWeight: '500'
+  },
+  bottomBannerWrap: { 
+    padding: 2,
+    marginTop: 0,
+    marginBottom: 5
+  },
+  bannerContainer: {
+    backgroundColor: 'transparent'
   }
 });
