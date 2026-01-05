@@ -128,6 +128,7 @@ async function classifyURL(urlString, u) {
   const host = u.hostname || '';
   const path = (u.pathname || '') + (u.search || '') + (u.hash || '');
   const lowerAll = (host + path).toLowerCase();
+  const hostOnlyLower = host.toLowerCase();
   
   const reasons = [];
   let score = 0;
@@ -223,7 +224,8 @@ async function classifyURL(urlString, u) {
   const baseDomain = getBaseDomain(normalizedHost);
   
   for (const brand in BRAND_DOMAINS) {
-    if (lowerAll.includes(brand)) {
+    // Only flag when the brand appears in the hostname itself to avoid UTM/query false positives
+    if (hostOnlyLower.includes(brand)) {
       const expectedDomain = BRAND_DOMAINS[brand];
       const normalizedExpected = normalizeHost(expectedDomain);
       
@@ -345,6 +347,7 @@ export function classifyInput(input, scannedType = null) {
     const host = u.hostname || '';
     const path = (u.pathname || '') + (u.search || '') + (u.hash || '');
     const lowerAll = (host + path).toLowerCase();
+    const hostOnlyLower = host.toLowerCase();
     
     const reasons = [];
     let score = 0;
@@ -422,7 +425,8 @@ export function classifyInput(input, scannedType = null) {
     const baseDomain = getBaseDomain(normalizedHost);
     
     for (const brand in BRAND_DOMAINS) {
-      if (lowerAll.includes(brand)) {
+      // Only flag when brand name is present in the hostname itself
+      if (hostOnlyLower.includes(brand)) {
         const expectedDomain = BRAND_DOMAINS[brand];
         const normalizedExpected = normalizeHost(expectedDomain);
         

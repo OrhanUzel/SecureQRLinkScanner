@@ -8,8 +8,8 @@ import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
 import AdBanner from '../components/AdBanner';
 import Toast from '../components/Toast';
-import appConfig from '../../app.config'; // app.json'dan sürüm bilgisi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -440,7 +440,7 @@ export default function SettingsScreen() {
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: dark ? '#6e7681' : '#8c959f' }]}>
-          {t('settings.version')}: {appConfig?.expo?.version ?? '—'}
+          {t('settings.version')}: {Constants?.expoConfig?.version ?? '—'}
         </Text>
       </View>
       <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} />

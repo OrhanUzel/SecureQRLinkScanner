@@ -154,9 +154,15 @@ export default function CreateQrScreen() {
     try {
       adsMod = await import('react-native-google-mobile-ads');
     } catch {
+      console.log('[ads][reward] import failed');
       return false;
     }
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = adsMod;
+    console.log('[ads][reward] units', {
+      rewardedInterstitialUnitId,
+      rewardedUnitId,
+      interstitialUnitId,
+    });
 
     const tryRewardedInterstitial = async () => {
       if (!rewardedInterstitialUnitId) throw new Error('missing_unit');
@@ -169,10 +175,10 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => ad.show()),
-          ad.addAdEventListener(AdEventType.ERROR, () => cleanup(new Error('ad_error'), reject)),
-          ad.addAdEventListener(AdEventType.CLOSED, () => cleanup(earned ? null : new Error('closed'), earned ? resolve : reject)),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; })
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded_interstitial] LOADED'); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded_interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded_interstitial] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded_interstitial] EARNED'); })
         );
         ad.load();
       });
@@ -189,10 +195,10 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => ad.show()),
-          ad.addAdEventListener(AdEventType.ERROR, () => cleanup(new Error('ad_error'), reject)),
-          ad.addAdEventListener(AdEventType.CLOSED, () => cleanup(earned ? null : new Error('closed'), earned ? resolve : reject)),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; })
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded] LOADED'); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded] ERROR', e); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded] EARNED'); })
         );
         ad.load();
       });
@@ -208,19 +214,20 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => ad.show()),
-          ad.addAdEventListener(AdEventType.ERROR, () => cleanup(new Error('ad_error'), reject)),
-          ad.addAdEventListener(AdEventType.CLOSED, () => cleanup(null, resolve))
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][interstitial] LOADED'); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][interstitial] CLOSED'); cleanup(null, resolve); })
         );
         ad.load();
       });
     };
 
-    try { await tryRewardedInterstitial(); return true; } catch {}
-    try { await tryRewarded(); return true; } catch {}
-    try { await tryInterstitial(); return true; } catch {}
+    try { await tryRewardedInterstitial(); return true; } catch (e) { console.log('[ads] rewarded_interstitial failed', e?.message || e); }
+    try { await tryRewarded(); return true; } catch (e) { console.log('[ads] rewarded failed', e?.message || e); }
+    try { await tryInterstitial(); return true; } catch (e) { console.log('[ads] interstitial failed', e?.message || e); }
+    console.log('[ads] all attempts failed -> ads_not_ready');
     return false;
-  }, [adUnits]);
+  }, [rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId]);
 
   const closeCustomGate = useCallback(() => {
     setCustomGateVisible(false);

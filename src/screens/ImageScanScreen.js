@@ -1,5 +1,5 @@
 import { getUsomInfo } from '../utils/usomHelper';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Share, ScrollView, useWindowDimensions, Animated, Modal, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
@@ -14,12 +14,11 @@ import { detectGs1Country } from '../utils/countryHelper';
 import { useAppTheme } from '../theme/ThemeContext';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import AdBanner from '../components/AdBanner';
-import * as Linking from 'expo-linking';
+import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../components/Toast';
-import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import OfflineNotice from '../components/OfflineNotice';
@@ -45,10 +44,11 @@ export default function ImageScanScreen() {
   const [consentVisible, setConsentVisible] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
   const [gs1Country, setGs1Country] = useState(null);
-  const [pickerDismissed, setPickerDismissed] = useState(true);
+  const [pickerDismissed, setPickerDismissed] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
   const hasHandledSharedImage = useRef(false);
+  const lastHandledSharedImageUri = useRef(null);
 
   const saveHistory = async (item) => {
     try {
@@ -417,7 +417,9 @@ export default function ImageScanScreen() {
 
   const handleSharedImageUri = (sharedUri) => {
     if (!sharedUri) return false;
+    if (sharedUri === lastHandledSharedImageUri.current) return false;
     hasHandledSharedImage.current = true;
+    lastHandledSharedImageUri.current = sharedUri;
     setPickerDismissed(false);
     setImage(sharedUri);
     setResult(null);
@@ -428,54 +430,43 @@ export default function ImageScanScreen() {
     return true;
   };
 
+  // Sadece route params üzerinden gelen görselleri işle
   useEffect(() => {
-    // Route params from deep link
-    if (!hasHandledSharedImage.current) {
-      const fromParams = route?.params?.imageUri;
-      if (fromParams) {
+    if (route.params?.imageUri) {
+      const fromParams = route.params.imageUri;
+      if (fromParams && fromParams !== lastHandledSharedImageUri.current) {
         handleSharedImageUri(fromParams);
-        return;
       }
     }
+  }, [route.params]);
 
-    let mounted = true;
-
-    const checkInitialUrl = async () => {
-      if (hasHandledSharedImage.current) return;
-      try {
-        const initialUrl = await Linking.getInitialURL();
-        if (!mounted) return;
-        const parsed = extractSharedImageUri(initialUrl);
-        if (parsed) {
-          handleSharedImageUri(parsed);
-        }
-      } catch (err) {
-        console.error('[ImageScanScreen] Failed to get initial URL', err);
-      }
-    };
-
-    checkInitialUrl();
-
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      const parsed = extractSharedImageUri(url);
-      if (parsed) {
-        handleSharedImageUri(parsed);
-      }
+  // Ekran görünür hale geldiğinde sıfırla
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      hasHandledSharedImage.current = false;
+      lastHandledSharedImageUri.current = null;
+      setImage(null);
+      setResult(null);
+      setError(null);
+      setPickerDismissed(false);
+      setAutoPickTriggered(false);
     });
+    return () => unsubscribe?.();
+  }, [navigation]);
 
-    // Focus listener for app coming to foreground
-    const unsubscribe = navigation?.addListener?.('focus', () => {
-      if (!hasHandledSharedImage.current) {
-        checkInitialUrl();
-      }
+  // Reset to default state when leaving the screen so coming back is clean
+  useEffect(() => {
+    const unsubscribe = navigation?.addListener?.('blur', () => {
+      hasHandledSharedImage.current = false;
+      lastHandledSharedImageUri.current = null;
+      setImage(null);
+      setResult(null);
+      setError(null);
+      setPickerDismissed(false);
+      setAutoPickTriggered(false);
     });
-
-    return () => {
-      mounted = false;
-      sub?.remove();
-      unsubscribe?.();
-    };
-  }, [route?.params, navigation]);
+    return () => unsubscribe?.();
+  }, [navigation]);
 
   const resetScan = async () => {
     setImage(null);

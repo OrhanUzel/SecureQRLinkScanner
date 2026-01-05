@@ -30,6 +30,17 @@ function RootNavigator() {
   const { dark } = useAppTheme();
   const { t } = useTranslation();
   const [initialRoute, setInitialRoute] = useState(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    (async () => {
+      try {
+        const mod = await import('react-native-google-mobile-ads');
+        await mod.default().initialize();
+      } catch (e) {
+        console.log('MobileAds init failed:', e?.message || e);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {

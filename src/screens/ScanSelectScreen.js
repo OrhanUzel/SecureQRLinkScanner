@@ -110,18 +110,19 @@ export default function ScanSelectScreen({ navigation }) {
       return true;
     }
     let mod = null;
-    try { mod = await import('react-native-google-mobile-ads'); } catch {}
+    try { mod = await import('react-native-google-mobile-ads'); } catch (e) { console.log('[ads][history] import failed', e); }
     if (!mod) return true;
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
+    console.log('[ads][history] units', ADS);
     const tryRewardedInterstitial = async () => {
       if (typeof ADS.REWARDED_INTERSTITIAL !== 'string' || !ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
       const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
-        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][history][rewarded_interstitial] LOADED'); ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, (err) => { console.log('[ads][history][rewarded_interstitial] ERROR', err); cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][history][rewarded_interstitial] CLOSED earned?', earned); cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][history][rewarded_interstitial] EARNED'); });
         const cleanup = () => { ul(); ue(); uc(); ur(); };
         ad.load();
       });
@@ -131,10 +132,10 @@ export default function ScanSelectScreen({ navigation }) {
       const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         let earned = false;
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
-        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][history][rewarded] LOADED'); ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, (err) => { console.log('[ads][history][rewarded] ERROR', err); cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][history][rewarded] CLOSED earned?', earned); cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
+        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][history][rewarded] EARNED'); });
         const cleanup = () => { ul(); ue(); uc(); ur(); };
         ad.load();
       });
@@ -143,16 +144,16 @@ export default function ScanSelectScreen({ navigation }) {
       if (typeof ADS.INTERSTITIAL !== 'string' || !ADS.INTERSTITIAL) throw new Error('missing_unit');
       const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); resolve(true); });
+        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][history][interstitial] LOADED'); ad.show(); });
+        const ue = ad.addAdEventListener(AdEventType.ERROR, (err) => { console.log('[ads][history][interstitial] ERROR', err); cleanup(); reject(new Error('ad_error')); });
+        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][history][interstitial] CLOSED'); cleanup(); resolve(true); });
         const cleanup = () => { ul(); ue(); uc(); };
         ad.load();
       });
     };
-    try { await tryRewardedInterstitial(); return true; } catch {}
-    try { await tryRewarded(); return true; } catch {}
-    try { await tryInterstitial(); return true; } catch {}
+    try { await tryRewardedInterstitial(); return true; } catch (e) { console.log('[ads][history] rewarded_interstitial failed', e?.message || e); }
+    try { await tryRewarded(); return true; } catch (e) { console.log('[ads][history] rewarded failed', e?.message || e); }
+    try { await tryInterstitial(); return true; } catch (e) { console.log('[ads][history] interstitial failed', e?.message || e); }
     return true;
   };
 

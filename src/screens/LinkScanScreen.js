@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult } from '../utils/linkActions';
@@ -17,6 +17,10 @@ import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OfflineNotice from '../components/OfflineNotice';
+
+// BU DEĞİŞKEN EKLENDİ:
+// Bileşen unmount olsa bile (başka ekrana gidip gelince) hafızada kalması için global tanımladık.
+let globalInitialUrlHandled = false;
 
 export default function LinkScanScreen() {
   const { t, i18n } = useTranslation();
@@ -34,158 +38,127 @@ export default function LinkScanScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
-  const hasInitialized = useRef(false);
+  
+  const hasHandledSharedLink = useRef(false);
+  const lastHandledSharedUrl = useRef(null);
+  const isShareSession = useRef(false); // sadece paylaşım menüsünden gelinen senaryoda otomatik tara
+  
+  // handledInitialUrl ref'i kaldırıldı, yerine yukarıdaki global değişken kullanılacak.
 
-  // Handle shared links from navigation params or deep linking
+  const handleSharedUrl = (sharedUrl) => {
+    if (!sharedUrl) return false;
+    if (sharedUrl === lastHandledSharedUrl.current) return false;
+    hasHandledSharedLink.current = true;
+    lastHandledSharedUrl.current = sharedUrl;
+    isShareSession.current = true;
+    setInput(sharedUrl);
+    setTimeout(() => {
+      onAnalyzeWithUrl(sharedUrl);
+    }, 300);
+    return true;
+  };
+
+  // Sadece route params veya initialURL üzerinden gelen URL'leri işle
   useEffect(() => {
     const handleSharedLinkInternal = async () => {
-      if (hasInitialized.current) return;
-      
-      let sharedUrl = null;
-      
-      // Check route params first (from navigation)
       const routeParams = route.params;
       if (routeParams?.url) {
-        sharedUrl = decodeURIComponent(routeParams.url);
-        hasInitialized.current = true;
-        setInput(sharedUrl);
-        setTimeout(() => {
-          onAnalyzeWithUrl(sharedUrl);
-        }, 300);
+        const sharedUrl = decodeURIComponent(routeParams.url);
+        if (handleSharedUrl(sharedUrl)) {
+          navigation.setParams({ url: undefined });
+        }
         return;
       }
-      
-      // Check for initial URL from deep linking or share intent
-      try {
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) {
-          // Parse URL - could be secureqrlinkscanner://linkscan/URL or direct https://
-          if (initialUrl.includes('linkscan/')) {
-            const parts = initialUrl.split('linkscan/');
-            if (parts.length > 1) {
-              sharedUrl = decodeURIComponent(parts[1]);
+
+      // Uygulama soğuk başlangıçta açıldıysa (Linking.getInitialURL)
+      // useRef yerine global değişkeni kontrol ediyoruz:
+      if (!globalInitialUrlHandled) {
+        try {
+          const initialUrl = await Linking.getInitialURL();
+          
+          // Initial URL kontrol edildi olarak işaretle (URL olsa da olmasa da)
+          // Böylece ekran tekrar açıldığında tekrar kontrol etmez.
+          globalInitialUrlHandled = true;
+
+          if (initialUrl) {
+            let sharedUrl = null;
+            if (initialUrl.includes('linkscan/')) {
+              const parts = initialUrl.split('linkscan/');
+              if (parts.length > 1) {
+                sharedUrl = decodeURIComponent(parts[1]);
+              }
+            } else if (initialUrl.startsWith('secureqrlinkscanner://')) {
+              const rest = initialUrl.replace('secureqrlinkscanner://', '');
+              if (rest.startsWith('http://') || rest.startsWith('https://')) {
+                sharedUrl = rest;
+              }
+            } else if (initialUrl.startsWith('http://') || initialUrl.startsWith('https://')) {
+              sharedUrl = initialUrl;
             }
-          } else if (initialUrl.startsWith('http://') || initialUrl.startsWith('https://')) {
-            // Direct URL from share intent
-            sharedUrl = initialUrl;
-          } else if (initialUrl.startsWith('secureqrlinkscanner://')) {
-            // Custom scheme with URL
-            const urlPart = initialUrl.replace('secureqrlinkscanner://', '');
-            if (urlPart.startsWith('http://') || urlPart.startsWith('https://')) {
-              sharedUrl = urlPart;
+            if (sharedUrl) {
+              handleSharedUrl(sharedUrl);
+              return;
             }
           }
+        } catch (e) {
+          // initial URL alınamadı, yoksay
         }
-      } catch (e) {
-        console.error('Error getting initial URL:', e);
-      }
-      
-      if (sharedUrl && !hasInitialized.current) {
-        hasInitialized.current = true;
-        setInput(sharedUrl);
-        // Auto-start analysis after a short delay
-        setTimeout(() => {
-          onAnalyzeWithUrl(sharedUrl);
-        }, 300);
       }
     };
-    
+
     handleSharedLinkInternal();
-    
-    // Listen for URL changes while app is running
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      let parsedUrl = null;
-      if (url.includes('linkscan/')) {
-        const parts = url.split('linkscan/');
-        if (parts.length > 1) {
-          parsedUrl = decodeURIComponent(parts[1]);
-        }
-      } else if (url.startsWith('http://') || url.startsWith('https://')) {
-        parsedUrl = url;
-      } else if (url.startsWith('secureqrlinkscanner://')) {
-        const urlPart = url.replace('secureqrlinkscanner://', '');
-        if (urlPart.startsWith('http://') || urlPart.startsWith('https://')) {
-          parsedUrl = urlPart;
-        }
-      }
-      
-      if (parsedUrl) {
-        hasInitialized.current = true;
-        setInput(parsedUrl);
-        setTimeout(() => {
-          onAnalyzeWithUrl(parsedUrl);
-        }, 300);
-      }
-    });
-    
-    return () => {
-      subscription?.remove();
-    };
+    return () => {};
   }, [route.params]);
 
-  // Focus listener to handle shared links when app comes to foreground
-  useEffect(() => {
-    const unsubscribe = navigation?.addListener?.('focus', () => {
-      if (!hasInitialized.current) {
-        const handleSharedLinkInternal = async () => {
-          if (hasInitialized.current) return;
-          
-          let sharedUrl = null;
-          
-          // Check route params first (from navigation)
-          const routeParams = route.params;
-          if (routeParams?.url) {
-            sharedUrl = decodeURIComponent(routeParams.url);
-            hasInitialized.current = true;
-            setInput(sharedUrl);
-            setTimeout(() => {
-              onAnalyzeWithUrl(sharedUrl);
-            }, 300);
-            return;
-          }
-          
-          // Check for initial URL from deep linking or share intent
-          try {
-            const initialUrl = await Linking.getInitialURL();
-            if (initialUrl) {
-              // Parse URL - could be secureqrlinkscanner://linkscan/URL or direct https://
-              if (initialUrl.includes('linkscan/')) {
-                const parts = initialUrl.split('linkscan/');
-                if (parts.length > 1) {
-                  sharedUrl = decodeURIComponent(parts[1]);
-                }
-              } else if (initialUrl.startsWith('http://') || initialUrl.startsWith('https://')) {
-                // Direct URL from share intent
-                sharedUrl = initialUrl;
-              } else if (initialUrl.startsWith('secureqrlinkscanner://')) {
-                // Custom scheme with URL
-                const urlPart = initialUrl.replace('secureqrlinkscanner://', '');
-                if (urlPart.startsWith('http://') || urlPart.startsWith('https://')) {
-                  sharedUrl = urlPart;
-                }
-              }
-            }
-          } catch (e) {
-            console.error('Error getting initial URL:', e);
-          }
-          
-          if (sharedUrl && !hasInitialized.current) {
-            hasInitialized.current = true;
-            setInput(sharedUrl);
-            // Auto-start analysis after a short delay
-            setTimeout(() => {
-              onAnalyzeWithUrl(sharedUrl);
-            }, 300);
-          }
-        };
-        
-        handleSharedLinkInternal();
+  // Ekran görünür hale geldiğinde sıfırla
+  useFocusEffect(
+    React.useCallback(() => {
+      const routeParams = route.params;
+      // Sadece paylaşım kaynaklı oturumda otomatik tarama yap
+      if (routeParams?.url && isShareSession.current) {
+        const sharedUrl = decodeURIComponent(routeParams.url);
+        if (sharedUrl && sharedUrl !== lastHandledSharedUrl.current) {
+          handleSharedUrl(sharedUrl);
+          navigation.setParams({ url: undefined });
+        }
+      } else {
+        // Param yoksa ve paylaşım oturumu değilse varsayılan duruma dön
+        hasHandledSharedLink.current = false;
+        lastHandledSharedUrl.current = null;
+        isShareSession.current = false;
+        setInput('');
+        setResult(null);
+        setLoading(false);
+        setOffline(false);
+        setPendingUrl(null);
+        setConfirmVisible(false);
+        setToastVisible(false);
+        setToastMsg('');
       }
-    });
 
-    return () => {
-      unsubscribe?.();
-    };
+      return () => {
+        // cleanup
+        hasHandledSharedLink.current = false;
+        isShareSession.current = false;
+      };
+    }, [route.params])
+  );
+
+  // Reset screen when navigating away so it opens in default state next time
+  useEffect(() => {
+    const unsubscribe = navigation?.addListener?.('blur', () => {
+      hasHandledSharedLink.current = false;
+      isShareSession.current = false;
+      setInput('');
+      setResult(null);
+      setLoading(false);
+      setOffline(false);
+      setPendingUrl(null);
+      setConfirmVisible(false);
+      setToastVisible(false);
+      setToastMsg('');
+    });
+    return () => unsubscribe?.();
   }, [navigation]);
 
   const onAnalyzeWithUrl = async (urlToAnalyze) => {
@@ -212,7 +185,7 @@ export default function LinkScanScreen() {
             const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
             const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
             const files = remote?.foundInFiles || [];
-          const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+            const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
             if (files.includes('usom')) {
               reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
             } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
@@ -329,6 +302,19 @@ export default function LinkScanScreen() {
   };
 
   const goToHome = () => {
+    // Ana menüye dönerken varsa paylaşım paramını temizle
+    navigation.setParams({ url: undefined });
+    hasHandledSharedLink.current = false;
+    lastHandledSharedUrl.current = null;
+    isShareSession.current = false;
+    setInput('');
+    setResult(null);
+    setLoading(false);
+    setOffline(false);
+    setPendingUrl(null);
+    setConfirmVisible(false);
+    setToastVisible(false);
+    setToastMsg('');
     navigation.navigate('Home');
   };
 
@@ -426,11 +412,16 @@ export default function LinkScanScreen() {
 
       {result && (
         <View style={[styles.card, compact ? { padding: 12 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
-          <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0969da' }]} numberOfLines={2} selectable>
-            {result.normalized}
-          </Text>
           <View style={styles.badgeRow}>
             <RiskBadge level={result.level} />
+          </View>
+          <View style={[styles.linkBox, { borderColor: dark ? '#1b2330' : '#d0d8e0', backgroundColor: dark ? '#0d121a' : '#f8fafc' }]}>
+            <View style={styles.linkRow}>
+              <Text style={[styles.linkLabel, { color: dark ? '#8b98a5' : '#6b7280' }]}>URL:</Text>
+              <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0969da' }]} selectable>
+                {result.normalized}
+              </Text>
+            </View>
           </View>
           {result.reasons?.length > 0 && (
             <View style={styles.reasonList}>
@@ -587,6 +578,9 @@ function RiskBadge({ level }) {
   );
 }
 
+// NOT: Dosyanızın en altındaki `const styles = StyleSheet.create({...})` kısmı 
+// orijinal kodunuzda neyse o şekilde burada devam etmelidir.
+
 const styles = StyleSheet.create({
   page: { flex: 1 },
   container: { 
@@ -685,7 +679,29 @@ const styles = StyleSheet.create({
   linkText: { 
     fontSize: 15, 
     fontWeight: '600',
-    lineHeight: 22
+    lineHeight: 22,
+    textAlign: 'center'
+  },
+  linkBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    columnGap: 4,
+    rowGap: 4
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginRight: 6
   },
   badgeRow: { flexDirection: 'row', justifyContent: 'center' },
   badge: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },

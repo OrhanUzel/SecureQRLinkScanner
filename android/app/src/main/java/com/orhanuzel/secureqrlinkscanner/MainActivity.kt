@@ -26,7 +26,7 @@ class MainActivity : ReactActivity() {
     setIntent(intent)
     handleShareIntent(intent)
   }
-
+  
   private fun handleShareIntent(intent: Intent?) {
     if (intent == null) return
     when (intent.action) {
