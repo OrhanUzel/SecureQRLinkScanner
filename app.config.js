@@ -81,12 +81,7 @@ module.exports = {
           ios: {
             useFrameworks: "static",
             deploymentTarget: "16.0",
-            extraPods: [
-              {
-                name: "Google-Mobile-Ads-SDK",
-                version: "11.13.0"
-              }
-            ]
+            
           }
         }
       ],
