@@ -4,6 +4,7 @@ export default{
   "expo": {
     "name": "Secure QR & Link Scanner",
     "slug": "secure-qr-link-scanner",
+    "owner": "orhanuzel",
     "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,7 +12,9 @@ export default{
     "extra": {
       "apiBaseUrl": "https://riskapi.orhanuzel.com.tr",
       "eas": {
-        "projectId": "9a2c9943-2d49-4c92-8d4b-4584e0d66b56"
+            "projectId": "3dd1abe1-0e50-4dfa-9930-171cd424ef15"
+
+     
       },
       "adUnits": {
         "androidBanner": process.env.ANDROID_BANNER_ID,
@@ -99,7 +102,13 @@ export default{
         {
           "ios": {
             "useFrameworks": "static",
-            "deploymentTarget": "16.0"
+            "deploymentTarget": "16.0",
+            "extraPods": [
+              {
+                "name": "Google-Mobile-Ads-SDK",
+                "version": "11.13.0"
+              }
+            ]
           }
         }
       ],
