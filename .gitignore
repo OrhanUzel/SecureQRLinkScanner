@@ -57,14 +57,18 @@ yarn-error.*
 /android/app/src/main/java/com/orhanuzel/secureqrlinkscanner/*
 !/android/app/src/main/java/com/orhanuzel/secureqrlinkscanner/MainActivity.kt
 !/android/app/src/main/AndroidManifest.xml
+android/app/build/
+android/app/release/
+*.apk
+*.aab
 
-src/config/
-!src/config/adUnitIds.js
 
 .env
 .env.local
 .env.production
+!.env.example
 
+release/
 
 
 
