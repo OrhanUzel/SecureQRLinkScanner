@@ -35,9 +35,11 @@ function RootNavigator() {
     (async () => {
       try {
         const mod = await import('react-native-google-mobile-ads');
-        await mod.default().initialize();
+        console.log('[ads][init][root] requesting initialize (default())');
+        const result = await mod.default().initialize();
+        console.log('[ads][init][root] initialized', { adapterStatuses: result?.adapterStatuses ? Object.keys(result.adapterStatuses) : undefined });
       } catch (e) {
-        console.log('MobileAds init failed:', e?.message || e);
+        console.log('[ads][init][root][error]', e?.message || e);
       }
     })();
   }, []);
@@ -256,8 +258,16 @@ export default function App() {
     (async () => {
       try {
         const mod = await import('react-native-google-mobile-ads');
-        try { await mod?.mobileAds()?.initialize(); } catch {}
-      } catch {}
+        console.log('[ads][init][shell] requesting initialize (mobileAds())');
+        try { 
+          const result = await mod?.mobileAds()?.initialize(); 
+          console.log('[ads][init][shell] initialized', { adapterStatuses: result?.adapterStatuses ? Object.keys(result.adapterStatuses) : undefined });
+        } catch (err) { 
+          console.log('[ads][init][shell][error]', err?.message || err); 
+        }
+      } catch (e) {
+        console.log('[ads][init][shell][import_error]', e?.message || e);
+      }
     })();
   }, []);
 

@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "camera": "Se requiere acceso a la cámara para escanear códigos.",
+    "tracking": "Este permiso es necesario para mostrar anuncios adaptados a tus intereses."
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Selecciona tipo de escaneo",
   "scan.select.subtitle": "Elige qué escanear y comienza un análisis seguro.",

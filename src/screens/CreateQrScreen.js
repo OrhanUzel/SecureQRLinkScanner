@@ -158,7 +158,8 @@ export default function CreateQrScreen() {
       return false;
     }
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = adsMod;
-    console.log('[ads][reward] units', {
+    console.log('[ads][reward] start', {
+      platform: Platform.OS,
       rewardedInterstitialUnitId,
       rewardedUnitId,
       interstitialUnitId,
@@ -170,16 +171,18 @@ export default function CreateQrScreen() {
       await new Promise((resolve, reject) => {
         let earned = false;
         const subscriptions = [];
+        const startedAt = Date.now();
         const cleanup = (error, cb) => {
           subscriptions.forEach((unsubscribe) => { try { unsubscribe(); } catch {} });
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded_interstitial] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded_interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded_interstitial] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded_interstitial] EARNED'); })
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded_interstitial] LOADED', { unitId: rewardedInterstitialUnitId, ms: Date.now() - startedAt }); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded_interstitial] ERROR', { unitId: rewardedInterstitialUnitId, ms: Date.now() - startedAt, code: e?.code, message: e?.message, domain: e?.domain, cause: e }); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded_interstitial] CLOSED', { earned, ms: Date.now() - startedAt }); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded_interstitial] EARNED', { unitId: rewardedInterstitialUnitId }); })
         );
+        console.log('[ads][rewarded_interstitial] load()', { unitId: rewardedInterstitialUnitId });
         ad.load();
       });
     };
@@ -190,16 +193,18 @@ export default function CreateQrScreen() {
       await new Promise((resolve, reject) => {
         let earned = false;
         const subscriptions = [];
+        const startedAt = Date.now();
         const cleanup = (error, cb) => {
           subscriptions.forEach((unsubscribe) => { try { unsubscribe(); } catch {} });
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded] EARNED'); })
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded] LOADED', { unitId: rewardedUnitId, ms: Date.now() - startedAt }); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded] ERROR', { unitId: rewardedUnitId, ms: Date.now() - startedAt, code: e?.code, message: e?.message, domain: e?.domain, cause: e }); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded] CLOSED', { earned, ms: Date.now() - startedAt }); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded] EARNED', { unitId: rewardedUnitId }); })
         );
+        console.log('[ads][rewarded] load()', { unitId: rewardedUnitId });
         ad.load();
       });
     };
@@ -209,15 +214,17 @@ export default function CreateQrScreen() {
       const ad = InterstitialAd.createForAdRequest(interstitialUnitId, { requestNonPersonalizedAdsOnly: true });
       await new Promise((resolve, reject) => {
         const subscriptions = [];
+        const startedAt = Date.now();
         const cleanup = (error, cb) => {
           subscriptions.forEach((unsubscribe) => { try { unsubscribe(); } catch {} });
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][interstitial] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][interstitial] CLOSED'); cleanup(null, resolve); })
+          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][interstitial] LOADED', { unitId: interstitialUnitId, ms: Date.now() - startedAt }); ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][interstitial] ERROR', { unitId: interstitialUnitId, ms: Date.now() - startedAt, code: e?.code, message: e?.message, domain: e?.domain, cause: e }); cleanup(new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][interstitial] CLOSED', { ms: Date.now() - startedAt }); cleanup(null, resolve); })
         );
+        console.log('[ads][interstitial] load()', { unitId: interstitialUnitId });
         ad.load();
       });
     };

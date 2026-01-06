@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "camera": "Camera access is required to scan codes.",
+    "tracking": "This permission is required to serve ads tailored to your interests."
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Select Scan Type",
   "scan.select.subtitle": "Choose what to scan and start a secure analysis.",

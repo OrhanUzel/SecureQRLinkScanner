@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -19,6 +19,7 @@ export default function PremiumScreen() {
   const SKU_LIFETIME = 'premium_lifetime';
   const purchaseUpdateRef = useRef(null);
   const purchaseErrorRef = useRef(null);
+  const isIOS = Platform.OS === 'ios';
 
   useEffect(() => { (async () => { try { const v = await AsyncStorage.getItem('premium'); setPremium(v === 'true'); } catch {} })(); }, []);
 
@@ -31,9 +32,12 @@ export default function PremiumScreen() {
         setIap(mod);
         try { await mod.initConnection(); } catch {}
         try { await mod.flushFailedPurchasesCachedAsPendingAndroid?.(); } catch {}
-        let items = [];
-        try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
-        if (items && items.length) { setSub(items[0]); setOffers(items[0]?.subscriptionOfferDetailsAndroid || []); }
+        // Android: subs + lifetime; iOS: only lifetime
+        if (!isIOS) {
+          let items = [];
+          try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
+          if (items && items.length) { setSub(items[0]); setOffers(items[0]?.subscriptionOfferDetailsAndroid || []); }
+        }
         let oneTime = [];
         try { oneTime = await mod.fetchProducts({ skus: [SKU_LIFETIME], type: 'in-app' }); } catch {}
         if (oneTime && oneTime.length) setProducts(oneTime);
@@ -135,20 +139,24 @@ export default function PremiumScreen() {
       <Text style={{ color: dark ? '#8b949e' : '#57606a', marginBottom: 12 }}>{t('settings.premiumDesc')}</Text>
       {!premium ? (
         <View style={{ gap: 12 }}>
-          <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#1f1630' : '#f4f1fb', borderColor: dark ? '#3b2c52' : '#e3def8' }]} onPress={buyMonthly} activeOpacity={0.9}>
-            <Text style={styles.emoji}>📅</Text>
-            <View style={styles.cardTextWrap}>
-              <Text style={[styles.cardTitle, { color: dark ? '#c1b6ff' : '#6c5ce7' }]}>{t('settings.premiumMonthly')}</Text>
-              <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('monthly') || ''}</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#311b16' : '#fff7ed', borderColor: dark ? '#5c3a2f' : '#fed7aa' }]} onPress={buyYearly} activeOpacity={0.9}>
-            <Text style={styles.emoji}>🗓️</Text>
-            <View style={styles.cardTextWrap}>
-              <Text style={[styles.cardTitle, { color: dark ? '#f59e0b' : '#d97706' }]}>{t('settings.premiumYearly')}</Text>
-              <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('yearly') || ''}</Text>
-            </View>
-          </TouchableOpacity>
+          {!isIOS && (
+            <>
+              <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#1f1630' : '#f4f1fb', borderColor: dark ? '#3b2c52' : '#e3def8' }]} onPress={buyMonthly} activeOpacity={0.9}>
+                <Text style={styles.emoji}>📅</Text>
+                <View style={styles.cardTextWrap}>
+                  <Text style={[styles.cardTitle, { color: dark ? '#c1b6ff' : '#6c5ce7' }]}>{t('settings.premiumMonthly')}</Text>
+                  <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('monthly') || ''}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#311b16' : '#fff7ed', borderColor: dark ? '#5c3a2f' : '#fed7aa' }]} onPress={buyYearly} activeOpacity={0.9}>
+                <Text style={styles.emoji}>🗓️</Text>
+                <View style={styles.cardTextWrap}>
+                  <Text style={[styles.cardTitle, { color: dark ? '#f59e0b' : '#d97706' }]}>{t('settings.premiumYearly')}</Text>
+                  <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('yearly') || ''}</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#1a4d2e' : '#e8f5e9', borderColor: '#4caf50' }]} onPress={buyLifetime} activeOpacity={0.9}>
             <Text style={styles.emoji}>💎</Text>
             <View style={styles.cardTextWrap}>

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, Platform, Alert, ScrollView, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
@@ -29,6 +29,7 @@ export default function SettingsScreen() {
   const SKU_LIFETIME = 'premium_lifetime';
   const purchaseUpdateRef = useRef(null);
   const purchaseErrorRef = useRef(null);
+  const isIOS = Platform.OS === 'ios';
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
@@ -55,11 +56,13 @@ export default function SettingsScreen() {
         try { await mod.initConnection(); } catch {}
         try { await mod.flushFailedPurchasesCachedAsPendingAndroid?.(); } catch {}
         let items = [];
-        try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
-        if (items && items.length) {
-          setSub(items[0]);
-          const subOffers = items[0]?.subscriptionOfferDetailsAndroid || [];
-          setOffers(subOffers);
+        if (!isIOS) {
+          try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
+          if (items && items.length) {
+            setSub(items[0]);
+            const subOffers = items[0]?.subscriptionOfferDetailsAndroid || [];
+            setOffers(subOffers);
+          }
         }
         let oneTime = [];
         try { oneTime = await mod.fetchProducts({ skus: [SKU_LIFETIME], type: 'in-app' }); } catch {}
@@ -142,6 +145,7 @@ export default function SettingsScreen() {
   };
 
   const buyMonthly = async () => {
+    if (isIOS) return;
     try {
       setProcessing(true);
       const offerToken = pickOfferToken('monthly');
@@ -159,6 +163,7 @@ export default function SettingsScreen() {
   };
 
   const buyYearly = async () => {
+    if (isIOS) return;
     try {
       setProcessing(true);
       const offerToken = pickOfferToken('yearly');
@@ -262,14 +267,34 @@ export default function SettingsScreen() {
             {t('settings.premiumDesc')}
           </Text>
           {!premium ? (
-            <TouchableOpacity 
-              style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
-              onPress={() => navigation.navigate('Premium')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.disclaimerIcon}>🚀</Text>
-              <Text style={styles.disclaimerText}>{t('settings.removeAds')}</Text>
-            </TouchableOpacity>
+        <View style={{ gap: 12 }}>
+          {!isIOS && (
+            <>
+              <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#1f1630' : '#f4f1fb', borderColor: dark ? '#3b2c52' : '#e3def8' }]} onPress={buyMonthly} activeOpacity={0.9}>
+                <Text style={styles.emoji}>📅</Text>
+                <View style={styles.cardTextWrap}>
+                  <Text style={[styles.cardTitle, { color: dark ? '#c1b6ff' : '#6c5ce7' }]}>{t('settings.premiumMonthly')}</Text>
+                  <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('monthly') || ''}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.card, { backgroundColor: dark ? '#311b16' : '#fff7ed', borderColor: dark ? '#5c3a2f' : '#fed7aa' }]} onPress={buyYearly} activeOpacity={0.9}>
+                <Text style={styles.emoji}>🗓️</Text>
+                <View style={styles.cardTextWrap}>
+                  <Text style={[styles.cardTitle, { color: dark ? '#f59e0b' : '#d97706' }]}>{t('settings.premiumYearly')}</Text>
+                  <Text style={[styles.cardSub, { color: dark ? '#8b98a5' : '#57606a' }]}>{formatOfferPrice('yearly') || ''}</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity 
+            style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
+            onPress={() => navigation.navigate('Premium')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.disclaimerIcon}>🚀</Text>
+            <Text style={styles.disclaimerText}>{t('settings.removeAds')}</Text>
+          </TouchableOpacity>
+        </View>
           ) : (
             <View style={{ marginTop: 12 }}>
               <Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>{t('settings.premiumActive')}</Text>

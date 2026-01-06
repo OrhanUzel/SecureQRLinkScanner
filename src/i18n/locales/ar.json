@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "camera": "يلزم الوصول إلى الكاميرا لمسح الأكواد.",
+    "tracking": "هذا الإذن ضروري لعرض إعلانات تناسب اهتماماتك."
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "اختر نوع المسح",
   "scan.select.subtitle": "اختر ما تريد مسحه وابدأ تحليلًا آمنًا.",

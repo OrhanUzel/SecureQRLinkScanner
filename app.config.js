@@ -1,5 +1,11 @@
 require('dotenv').config();
 
+// Load locale files for dynamic iOS permission texts
+const tr = require('./src/i18n/locales/tr.json');
+const en = require('./src/i18n/locales/en.json');
+const es = require('./src/i18n/locales/es.json');
+const ar = require('./src/i18n/locales/ar.json');
+
 module.exports = {
   expo: {
     name: "Secure QR & Link Scanner",
@@ -32,11 +38,33 @@ module.exports = {
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
+    // Dynamic iOS permission strings per locale
+    locales: {
+      tr: {
+        NSCameraUsageDescription: tr.permissions?.camera,
+        NSUserTrackingUsageDescription: tr.permissions?.tracking
+      },
+      en: {
+        NSCameraUsageDescription: en.permissions?.camera,
+        NSUserTrackingUsageDescription: en.permissions?.tracking
+      },
+      es: {
+        NSCameraUsageDescription: es.permissions?.camera,
+        NSUserTrackingUsageDescription: es.permissions?.tracking
+      },
+      ar: {
+        NSCameraUsageDescription: ar.permissions?.camera,
+        NSUserTrackingUsageDescription: ar.permissions?.tracking
+      }
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.orhanuzel.secureqrlinkscanner",
       infoPlist: {
-        ITSAppUsesNonExemptEncryption: false
+        ITSAppUsesNonExemptEncryption: false,
+        // Fallback to English if locale-specific strings fail
+        NSCameraUsageDescription: en.permissions?.camera,
+        NSUserTrackingUsageDescription: en.permissions?.tracking
       }
     },
     android: {

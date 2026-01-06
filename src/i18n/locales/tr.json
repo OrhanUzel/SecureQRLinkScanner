@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "camera": "Kamera izni QR kodlarını taramak için gereklidir.",
+    "tracking": "Bu izin, ilgi alanlarınıza uygun reklamlar sunabilmemiz için gereklidir."
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Tarama Türünü Seç",
   "scan.select.subtitle": "Ne taramak istediğini seç ve güvenli analiz başlat.",

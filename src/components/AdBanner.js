@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -71,8 +71,29 @@ export default function AdBanner({ placement, variant, isFooter = false }) {
           unitId={bannerUnitId}
           size={bannerSize}
           requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          onAdLoaded={() => {
+            console.log('[ads][banner][loaded]', {
+              platform: Platform.OS,
+              placement,
+              variant,
+              isFooter,
+              unitId: bannerUnitId,
+              size: bannerSize,
+            });
+          }}
           onAdFailedToLoad={(err) => {
-            console.log('AdBanner failed to load:', err);
+            console.log('[ads][banner][error]', {
+              platform: Platform.OS,
+              placement,
+              variant,
+              isFooter,
+              unitId: bannerUnitId,
+              size: bannerSize,
+              code: err?.code,
+              message: err?.message,
+              domain: err?.domain,
+              cause: err,
+            });
             setFailed(true); // Hata alınca alanı tamamen gizle
           }}
         />
