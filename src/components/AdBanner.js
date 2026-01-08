@@ -112,6 +112,7 @@ const styles = StyleSheet.create({
   adContainer: {
     width: '100%',
     alignItems: 'center',
+    alignSelf: 'center',
     overflow: 'hidden'
   },
 

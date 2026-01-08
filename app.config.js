@@ -117,9 +117,9 @@ module.exports = {
       [
         "react-native-google-mobile-ads",
         {
-          androidAppId: process.env.ADMOB_ANDROID_APP_ID,
-          iosAppId: process.env.ADMOB_IOS_APP_ID,
-          skAdNetworkItems: [
+          "androidAppId": "ca-app-pub-2533405439201612~1382783323",
+          "iosAppId": "ca-app-pub-2533405439201612~4853548374",
+          "skAdNetworkItems": [
             "cstr6suwn9.skadnetwork",
             "4fzdc2evr5.skadnetwork",
             "xga6mpmplv.skadnetwork",
@@ -127,7 +127,8 @@ module.exports = {
           ]
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-tracking-transparency"
     ]
   }
 };

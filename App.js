@@ -34,12 +34,15 @@ function RootNavigator() {
     if (Platform.OS === 'web') return;
     (async () => {
       try {
+        if (Platform.OS === 'ios') {
+          const { status } = await requestTrackingPermissionsAsync();
+          console.log('[App] Tracking permission status:', status);
+        }
         const mod = await import('react-native-google-mobile-ads');
-        console.log('[ads][init][root] requesting initialize (default())');
-        const result = await mod.default().initialize();
-        console.log('[ads][init][root] initialized', { adapterStatuses: result?.adapterStatuses ? Object.keys(result.adapterStatuses) : undefined });
+        await mod.default().initialize();
+        console.log('[App] MobileAds initialized');
       } catch (e) {
-        console.log('[ads][init][root][error]', e?.message || e);
+        console.log('MobileAds init/permission failed:', e?.message || e);
       }
     })();
   }, []);
@@ -258,16 +261,8 @@ export default function App() {
     (async () => {
       try {
         const mod = await import('react-native-google-mobile-ads');
-        console.log('[ads][init][shell] requesting initialize (mobileAds())');
-        try { 
-          const result = await mod?.mobileAds()?.initialize(); 
-          console.log('[ads][init][shell] initialized', { adapterStatuses: result?.adapterStatuses ? Object.keys(result.adapterStatuses) : undefined });
-        } catch (err) { 
-          console.log('[ads][init][shell][error]', err?.message || err); 
-        }
-      } catch (e) {
-        console.log('[ads][init][shell][import_error]', e?.message || e);
-      }
+        try { await mod?.mobileAds()?.initialize(); } catch {}
+      } catch {}
     })();
   }, []);
 
