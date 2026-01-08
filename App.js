@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import i18n, { setLanguage } from './src/i18n';
 import { useTranslation } from 'react-i18next';
 import ScanSelectScreen from './src/screens/ScanSelectScreen';
@@ -32,19 +33,34 @@ function RootNavigator() {
   const [initialRoute, setInitialRoute] = useState(null);
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    (async () => {
+    
+    let isMounted = true;
+
+    const initAds = async () => {
       try {
         if (Platform.OS === 'ios') {
+          // Wait a bit for the app to be fully active
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const { status } = await requestTrackingPermissionsAsync();
           console.log('[App] Tracking permission status:', status);
+          if (status !== 'granted') {
+             console.log('[App] Tracking permission NOT granted. Ads may not load.');
+          }
         }
+        
+        if (!isMounted) return;
+
         const mod = await import('react-native-google-mobile-ads');
         await mod.default().initialize();
         console.log('[App] MobileAds initialized');
       } catch (e) {
         console.log('MobileAds init/permission failed:', e?.message || e);
       }
-    })();
+    };
+
+    initAds();
+
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
