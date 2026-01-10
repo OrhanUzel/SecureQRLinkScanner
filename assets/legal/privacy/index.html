@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Privacy Policy • Secure QR & Link Scanner</title>
+    <link rel="icon" type="image/png" href="../../icon.png">
+    <meta name="description" content="Privacy policy and data safety information for Secure QR & Link Scanner">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="container">
+      <div class="topbar">
+        <div class="brand">
+          <img src="../../icon.png" alt="Secure QR & Link Scanner" class="logo">
+          <div class="app">
+            <h1>Privacy Policy</h1>
+            <div class="subtitle">App: Secure QR & Link Scanner</div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="chip">Last updated: 08 January  2026</span>
+          <span class="chip">Contact: <a href="mailto:orhanuzel@yahoo.com">orhanuzel@yahoo.com</a></span>
+        </div>
+      </div>
+
+      <div class="nav">
+        <a href="#overview">Overview</a>
+        <a href="#data">Data Collected</a>
+        <a href="#processing">Use & Processing</a>
+        <a href="#third-parties">Third Parties</a>
+        <a href="#permissions">Permissions</a>
+        <a href="#retention">Retention</a>
+        <a href="#children">Children</a>
+        <a href="#contact">Contact</a>
+      </div>
+
+      <section id="overview" class="card callout">
+        <h2>Overview</h2>
+        <p>
+          Secure QR &amp; Link Scanner is a security tool designed to analyze QR codes, barcodes, and links.
+          To provide comprehensive protection, the app employs real-time cloud analysis to verify links against known threats whenever an internet connection is available.
+          This is complemented by on-device processing for offline efficiency and speed.
+        </p>
+      </section>
+
+      <section id="data" class="card">
+        <h2>Data Collected</h2>
+        <ul class="list">
+          <li><strong>Scans &amp; inputs:</strong> QR/Barcode contents and text/URL inputs are processed for risk analysis. The app does not require an account.</li>
+          <li><strong>On-device storage:</strong> Scan history, theme, language, consent status, and premium flag are stored locally via <span class="mono">AsyncStorage</span> and <span class="mono">SecureStore</span>.</li>
+          <li><strong>Remote risk check:</strong> When you scan or enter a URL and the app performs a remote risk check, the entered URL is sent to a server endpoint (for example <span class="mono">/api/riskcheck</span>) to obtain a risk result. Network requests may include standard metadata (e.g., IP address, device/network info) as part of normal internet communications.</li>
+          <li><strong>Advertising:</strong> If ads are shown, Google AdMob may collect or receive device identifiers and usage/diagnostic information as described in Google’s policies.</li>
+          <li><strong>Purchases:</strong> Premium/Remove Ads purchases are handled by Apple App Store / Google Play. The app does not process sensitive payment card data.</li>
+        </ul>
+      </section>
+
+      <section id="processing" class="card">
+        <h2>Use &amp; Processing</h2>
+        <div class="grid">
+          <div class="card" style="margin:0">
+            <h2>Local Security Analysis</h2>
+            <ul class="list">
+              <li>Heuristic checks for suspicious URL patterns (e.g., IP-based hosts, uncommon ports, potential brand spoofing).</li>
+              <li>Local classification of QR formats (URL, Wi‑Fi, contact, etc.).</li>
+            </ul>
+          </div>
+          <div class="card" style="margin:0">
+            <h2>Remote Risk Check (Online)</h2>
+            <ul class="list">
+              <li>When you scan or enter a URL while you have an internet connection, the app may query a remote endpoint with that URL to check external risk lists.</li>
+              <li>The response may include a risk status and the sources where the URL/domain was found.</li>
+            </ul>
+            <div class="small">If you are offline, the app will rely on local analysis and cannot complete online checks.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <ul class="list">
+          <li><strong>Ads:</strong> Banner, interstitial, rewarded, and rewarded-interstitial ads may be shown depending on app settings and premium status.</li>
+          <li><strong>Non-personalized ads:</strong> The app may request non-personalized ads where supported.</li>
+        </ul>
+      </section>
+
+      <section id="third-parties" class="card">
+        <h2>Third Parties</h2>
+        <ul class="list">
+          <li><strong>Google AdMob</strong> (ads): <a href="https://policies.google.com/privacy?hl=en" target="_blank" rel="noopener">Google Privacy Policy</a></li>
+          <li><strong>Apple App Store / Google Play</strong> (purchases): the respective store’s privacy and payment policies apply.</li>
+        </ul>
+        <p class="small">
+          Google may collect information such as unique identifiers, device and app information, IP address, and interactions with ads, as described in their policy.
+        </p>
+      </section>
+
+      <section id="permissions" class="card">
+        <h2>Permissions</h2>
+        <ul class="list">
+          <li><strong>Camera:</strong> used for QR/Barcode scanning.</li>
+          <li><strong>Media/Gallery:</strong> used to scan from photos and to save generated QR images.</li>
+          <li><strong>Sharing:</strong> used to share generated content via the system share sheet.</li>
+          <li><strong>Tracking permission (iOS):</strong> if requested, used for ad personalization where applicable.</li>
+        </ul>
+      </section>
+
+      <section id="retention" class="card">
+        <h2>Data Retention</h2>
+        <p>
+          The app stores history, theme, language, and premium status on-device only. You can clear history within the app.
+          Third-party services (ads, stores) retain data according to their own policies.
+        </p>
+      </section>
+
+      <section id="children" class="card">
+        <h2>Children’s Privacy</h2>
+        <p>The app is not directed to children. Ad settings depend on your device and store policies.</p>
+      </section>
+
+      <section id="contact" class="card">
+        <h2>Contact</h2>
+        <p>For privacy-related questions, email: <a href="mailto:orhanuzel@yahoo.com">orhanuzel@yahoo.com</a></p>
+      </section>
+
+      <footer class="footer">
+        <p>© 2025 Secure QR &amp; Link Scanner</p>
+      </footer>
+    </main>
+  </body>
+</html>

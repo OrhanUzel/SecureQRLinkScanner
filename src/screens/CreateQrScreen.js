@@ -3,17 +3,18 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, ScrollVi
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
+import { hasConsent } from '../components/ConsentModal';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import Toast from '../components/Toast';
-import AdBanner from '../components/AdBanner';
 import { useNavigation } from '@react-navigation/native';
 import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from '../config/adUnitIds';
 import { QRCodeWriter, BarcodeFormat, EncodeHintType } from '@zxing/library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import NetInfo from '@react-native-community/netinfo';
 
 const FRAME_SWATCHES = ['#0f172a', '#2563eb', '#1d4ed8', '#0f766e', '#22c55e', '#f97316', '#dc2626', '#9333ea', '#111827', '#ffffff'];
 
@@ -23,7 +24,7 @@ const CUSTOM_MODES = [
   { key: 'logo_frame', icon: 'albums-outline', labelKey: 'custom_qr_mode.logo_frame', defaultLabel: 'Logo + Çerçeve' },
   { key: 'frame_text', icon: 'chatbox-ellipses-outline', labelKey: 'custom_qr_mode.frame_text', defaultLabel: 'Çerçeve + Yazı' },
 ];
-const FRAME_TEXT_MAX = 42;//18
+const FRAME_TEXT_MAX = 42;
 
 
 
@@ -43,7 +44,6 @@ export default function CreateQrScreen() {
   const [inputHeight, setInputHeight] = useState(44);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
   const [premium, setPremium] = useState(false);
-  const [preparing, setPreparing] = useState(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
 
   const [qrType, setQrType] = useState('url');
@@ -66,11 +66,11 @@ export default function CreateQrScreen() {
   const [customGateLoading, setCustomGateLoading] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [unlockedModes, setUnlockedModes] = useState({});
+  const [unlockModalVisible, setUnlockModalVisible] = useState(false);
+  const [rewardUnlocked, setRewardUnlocked] = useState(false);
   const lastGeneratedRef = useRef('');
   const [pendingQrType, setPendingQrType] = useState(null);
   const [missingInfoType, setMissingInfoType] = useState(null);
-  const [rewardUnlocked, setRewardUnlocked] = useState(false);
-  const [unlockModalVisible, setUnlockModalVisible] = useState(false);
   const missingInfoMessage = useMemo(() => {
     if (!missingInfoType) return '';
     if (missingInfoType === 'wifi') return t('missing_info.wifi') || 'Please enter SSID and password if needed.';
@@ -148,25 +148,24 @@ export default function CreateQrScreen() {
     setPendingQrType(null);
   }, [ensureTypeAccess]);
 
+  const [adInfoModal, setAdInfoModal] = useState({ visible: false, title: '', message: '' });
+
   const runCustomRewardFlow = useCallback(async () => {
     if (Platform.OS === 'web') return true;
     let adsMod = null;
     try {
       adsMod = await import('react-native-google-mobile-ads');
     } catch {
-      console.log('[ads][reward] import failed');
       return false;
     }
     const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = adsMod;
-    console.log('[ads][reward] units', {
-      rewardedInterstitialUnitId,
-      rewardedUnitId,
-      interstitialUnitId,
-    });
+
+    const userConsented = await hasConsent();
+    const requestOptions = { requestNonPersonalizedAdsOnly: !userConsented };
 
     const tryRewardedInterstitial = async () => {
       if (!rewardedInterstitialUnitId) throw new Error('missing_unit');
-      const ad = RewardedInterstitialAd.createForAdRequest(rewardedInterstitialUnitId, { requestNonPersonalizedAdsOnly: true });
+      const ad = RewardedInterstitialAd.createForAdRequest(rewardedInterstitialUnitId, requestOptions);
       await new Promise((resolve, reject) => {
         let earned = false;
         const subscriptions = [];
@@ -175,10 +174,10 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded_interstitial] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded_interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded_interstitial] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded_interstitial] EARNED'); })
+          ad.addAdEventListener(RewardedAdEventType.LOADED, () => { ad.show(); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { cleanup(e || new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); })
         );
         ad.load();
       });
@@ -186,7 +185,7 @@ export default function CreateQrScreen() {
 
     const tryRewarded = async () => {
       if (!rewardedUnitId) throw new Error('missing_unit');
-      const ad = RewardedAd.createForAdRequest(rewardedUnitId, { requestNonPersonalizedAdsOnly: true });
+      const ad = RewardedAd.createForAdRequest(rewardedUnitId, requestOptions);
       await new Promise((resolve, reject) => {
         let earned = false;
         const subscriptions = [];
@@ -195,10 +194,10 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][rewarded] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][rewarded] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][rewarded] CLOSED earned?', earned); cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); }),
-          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; console.log('[ads][rewarded] EARNED'); })
+          ad.addAdEventListener(RewardedAdEventType.LOADED, () => { ad.show(); }),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { cleanup(e || new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(earned ? null : new Error('closed'), earned ? resolve : reject); })
         );
         ad.load();
       });
@@ -206,7 +205,7 @@ export default function CreateQrScreen() {
 
     const tryInterstitial = async () => {
       if (!interstitialUnitId) throw new Error('missing_unit');
-      const ad = InterstitialAd.createForAdRequest(interstitialUnitId, { requestNonPersonalizedAdsOnly: true });
+      const ad = InterstitialAd.createForAdRequest(interstitialUnitId, requestOptions);
       await new Promise((resolve, reject) => {
         const subscriptions = [];
         const cleanup = (error, cb) => {
@@ -214,19 +213,19 @@ export default function CreateQrScreen() {
           if (error) cb(error); else cb(true);
         };
         subscriptions.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => { console.log('[ads][interstitial] LOADED'); ad.show(); }),
-          ad.addAdEventListener(AdEventType.ERROR, (e) => { console.log('[ads][interstitial] ERROR', e); cleanup(new Error('ad_error'), reject); }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => { console.log('[ads][interstitial] CLOSED'); cleanup(null, resolve); })
+          ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); }),
+          ad.addAdEventListener(AdEventType.ERROR, (e) => { cleanup(e || new Error('ad_error'), reject); }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(null, resolve); })
         );
         ad.load();
       });
     };
 
-    try { await tryRewardedInterstitial(); return true; } catch (e) { console.log('[ads] rewarded_interstitial failed', e?.message || e); }
-    try { await tryRewarded(); return true; } catch (e) { console.log('[ads] rewarded failed', e?.message || e); }
-    try { await tryInterstitial(); return true; } catch (e) { console.log('[ads] interstitial failed', e?.message || e); }
-    console.log('[ads] all attempts failed -> ads_not_ready');
-    return false;
+    const errors = [];
+    try { await tryRewardedInterstitial(); return { ok: true, errors: [] }; } catch (e) { errors.push(e); }
+    try { await tryRewarded(); return { ok: true, errors: [] }; } catch (e) { errors.push(e); }
+    try { await tryInterstitial(); return { ok: true, errors: [] }; } catch (e) { errors.push(e); }
+    return { ok: false, errors };
   }, [rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId]);
 
   const closeCustomGate = useCallback(() => {
@@ -241,16 +240,23 @@ export default function CreateQrScreen() {
     setMissingInfoType(null);
   }, []);
 
-  const closeUnlockModal = useCallback(() => {
-    setUnlockModalVisible(false);
-    setRewardUnlocked(false);
-  }, []);
-
   const handleWatchAdUnlock = useCallback(async () => {
     if (customGateLoading) return;
+    
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      setAdInfoModal({
+        visible: true,
+        title: t('ads.modal.title') || 'Reklam',
+        message: t('ads.modal.offline') || 'İnternet bağlantısı yok. Reklamı yüklemek için internete bağlanın.'
+      });
+      return;
+    }
+
     setCustomGateLoading(true);
     try {
-      const ok = await runCustomRewardFlow();
+      const res = await runCustomRewardFlow();
+      const ok = res === true || res?.ok === true;
       if (ok) {
         setUnlockedModes((prev) => {
           const next = { ...prev };
@@ -263,10 +269,37 @@ export default function CreateQrScreen() {
         closeCustomGate();
         setToast({ visible: true, type: 'success', message: t('custom_qr_unlocked') || 'Bu seçenek açıldı!' });
       } else {
-        setToast({ visible: true, type: 'error', message: t('ads_not_ready') || 'Reklam şu anda yüklenemedi.' });
+        const errs = Array.isArray(res?.errors) ? res.errors : [];
+        console.log('[CreateQrScreen] Ad failures:', JSON.stringify(errs));
+        
+        const normalized = errs.map((e) => ({
+          code: e?.code || e?.responseCode || e?.name,
+          message: e?.message ? String(e.message) : String(e),
+        }));
+
+        const hasNetwork = normalized.some((e) => {
+          const c = String(e.code || '').toUpperCase();
+          const m = String(e.message || '').toUpperCase();
+          return c.includes('NETWORK') || m.includes('NETWORK') || c === '2' || m.includes('CODE 2') || m.includes('CODE: 2');
+        });
+
+        const hasNoFill = normalized.some((e) => {
+           const c = String(e.code || '').toUpperCase();
+           const m = String(e.message || '').toUpperCase();
+           return c.includes('NO_FILL') || m.includes('NO AD TO SHOW') || m.includes('NO FILL') || c === '3' || m.includes('CODE 3') || m.includes('CODE: 3');
+        });
+
+        const title = t('ads.modal.title') || 'Reklam';
+        const message = hasNetwork
+          ? (t('ads.modal.offline') || 'İnternet bağlantısı yok. Reklamı yüklemek için internete bağlanın.')
+          : (hasNoFill
+            ? (t('ads.modal.noFill') || 'Şu anda gösterilecek reklam bulunamadı. Lütfen biraz sonra tekrar deneyin.')
+            : (t('ads.modal.notReady') || 'Reklam şu anda yüklenemedi. Lütfen tekrar deneyin.'));
+        
+        setAdInfoModal({ visible: true, title, message });
       }
     } catch {
-      setToast({ visible: true, type: 'error', message: t('ads_not_ready') || 'Reklam şu anda yüklenemedi.' });
+      setAdInfoModal({ visible: true, title: t('ads.modal.title') || 'Reklam', message: t('ads.modal.generic') || 'Bir sorun oluştu. Lütfen tekrar deneyin.' });
     } finally {
       setCustomGateLoading(false);
     }
@@ -368,6 +401,10 @@ export default function CreateQrScreen() {
     return { text: t('locked') || 'Kilitli', color: '#f97316' };
   }, [premium, unlockedModes, customMode, t]);
 
+  const closeUnlockModal = useCallback(() => {
+    setUnlockModalVisible(false);
+  }, []);
+
   const generateMatrix = useCallback(async (text) => {
     try {
       if (!text || !text.trim()) {
@@ -376,7 +413,6 @@ export default function CreateQrScreen() {
         return;
       }
 
-      setPreparing(true);
       setIsGenerating(true);
       setError(null);
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -410,7 +446,6 @@ export default function CreateQrScreen() {
       setMatrix(null);
       setError(t('qr_generation_error') || 'QR kod oluşturulamadı. Lütfen tekrar deneyin.');
     } finally {
-      setPreparing(false);
       setIsGenerating(false);
     }
   }, [t]);
@@ -485,28 +520,6 @@ export default function CreateQrScreen() {
     lastGeneratedRef.current = payload;
     Keyboard.dismiss();
     await generateMatrix(payload);
-  };
-
-  const renderLoadingStates = () => {
-    const active = isGenerating || preparing;
-    if (!active) return null;
-    return (
-      <View style={[styles.loadingOverlay, { backgroundColor: dark ? 'rgba(10,14,20,0.8)' : 'rgba(255,255,255,0.9)' }]}>
-        <View style={[styles.loadingCard, { backgroundColor: dark ? '#0f172a' : '#ffffff', borderColor: dark ? '#1d2a3f' : '#e2e8f0' }]}>
-          <View style={[styles.loadingIconWrap, { backgroundColor: dark ? 'rgba(79,70,229,0.15)' : 'rgba(99,102,241,0.12)' }]}>
-            <ActivityIndicator size="small" color={dark ? '#c4d4ff' : '#4f46e5'} />
-          </View>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text style={[styles.loadingTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-              {t('loading.generatingCode') || 'Kodunuz oluşturuluyor...'}
-            </Text>
-            <Text style={[styles.loadingSubtitle, { color: dark ? '#94a3b8' : '#475569' }]}>
-              {t('loading.generatingCodeDesc') || 'QR kod hazırlanıyor ve özelleştirmeler uygulanıyor'}
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
   };
 
   useEffect(() => {
@@ -1220,9 +1233,7 @@ export default function CreateQrScreen() {
       </View>
 
     </ScrollView>
-    <View style={{ padding:0 }}>
-      <AdBanner placement="global_footer" isFooter />
-    </View>
+
     <Toast 
       visible={toast.visible} 
       message={toast.message}
@@ -1340,6 +1351,38 @@ export default function CreateQrScreen() {
           <TouchableOpacity
             style={[styles.rewardCta, { backgroundColor: '#2563eb', marginTop: 14 }]}
             onPress={closeMissingInfo}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.rewardCtaText}>
+              {t('actions.ok') || 'Tamam'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    <Modal
+      visible={adInfoModal.visible}
+      animationType="fade"
+      transparent
+      onRequestClose={() => setAdInfoModal((p) => ({ ...p, visible: false }))}
+    >
+      <View style={styles.rewardOverlay}>
+        <View style={[
+          styles.rewardCard,
+          { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }
+        ]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <Ionicons name="alert-circle" size={22} color={dark ? '#facc15' : '#d97706'} />
+            <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>
+              {adInfoModal.title}
+            </Text>
+          </View>
+          <Text style={[styles.rewardSubtitle, { color: dark ? '#94a3b8' : '#475569' }]}>
+            {adInfoModal.message}
+          </Text>
+          <TouchableOpacity
+            style={[styles.rewardCta, { backgroundColor: '#2563eb', marginTop: 14 }]}
+            onPress={() => setAdInfoModal((p) => ({ ...p, visible: false }))}
             activeOpacity={0.9}
           >
             <Text style={styles.rewardCtaText}>
@@ -1796,11 +1839,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  loadingCard: { width: '100%', maxWidth: 360, borderRadius: 16, borderWidth: 1, padding: 16, flexDirection: 'row', gap: 12, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-  loadingIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  loadingTitle: { fontSize: 15, fontWeight: '800' },
-  loadingSubtitle: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
   customModesRow: {
     flexGrow: 1,
     gap: 12,

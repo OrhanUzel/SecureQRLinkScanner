@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, Alert, Mo
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdBanner from '../components/AdBanner';
 import { useNavigation } from '@react-navigation/native';
 import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from '../config/adUnitIds';
 import { detectGs1Country } from '../utils/countryHelper';
@@ -255,9 +254,7 @@ export default function HistoryScreen() {
         }}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
       />
-        <View style={[styles.bottomBanner, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', paddingBottom: Math.max(insets.bottom, 8) }]}> 
-              <AdBanner placement="settings"  />
-            </View>
+
       <ConfirmOpenLinkModal 
         visible={confirmVisible}
         url={pendingUrl}

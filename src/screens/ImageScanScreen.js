@@ -13,7 +13,6 @@ import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { detectGs1Country } from '../utils/countryHelper';
 import { useAppTheme } from '../theme/ThemeContext';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import AdBanner from '../components/AdBanner';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
@@ -844,9 +843,7 @@ export default function ImageScanScreen() {
         onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
       />
     </ScrollView>
-    <View style={{ padding: 0 }}>
-      <AdBanner placement="global_footer" isFooter />
-    </View>
+
     <Toast visible={toastVisible} message={toastMsg} onHide={() => setToastVisible(false)} dark={dark} style={{ position: 'absolute', bottom: 80, left: 20, right: 20 }} />
     {renderLoadingStates()}
     </View>

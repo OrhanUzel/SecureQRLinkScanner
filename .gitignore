@@ -57,6 +57,11 @@ yarn-error.*
 /android/app/src/main/java/com/orhanuzel/secureqrlinkscanner/*
 !/android/app/src/main/java/com/orhanuzel/secureqrlinkscanner/MainActivity.kt
 !/android/app/src/main/AndroidManifest.xml
+!/android/app/proguard-rules.pro
+!/android/gradle.properties
+!/android/build.gradle
+!/android/settings.gradle
+!/android/app/build.gradle
 android/app/build/
 android/app/release/
 *.apk

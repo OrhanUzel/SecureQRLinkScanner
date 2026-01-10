@@ -3,6 +3,15 @@
     "camera": "Se requiere acceso a la cámara para escanear códigos.",
     "tracking": "Este permiso es necesario para mostrar anuncios adaptados a tus intereses."
   },
+  "ads": {
+    "modal": {
+      "title": "Anuncio",
+      "offline": "No hay conexión a internet. Por favor, conéctese a internet para cargar el anuncio.",
+      "noFill": "No se encontró ningún anuncio para mostrar en este momento. Por favor, inténtelo de nuevo más tarde.",
+      "notReady": "El anuncio no se pudo cargar en este momento. Por favor, inténtelo de nuevo.",
+      "generic": "Algo salió mal. Por favor, inténtelo de nuevo."
+    }
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Selecciona tipo de escaneo",
   "scan.select.subtitle": "Elige qué escanear y comienza un análisis seguro.",
@@ -91,8 +100,8 @@
   "consent.accept": "Acepto",
   "consent.decline": "Salir",
   "classifier.httpWarning": "Enlace sin HTTPS",
-  "classifier.homoglyphWarning": "Posible dominio homógrafo/IDN",
-  "classifier.keywordWarning": "Se detectó palabra clave sospechosa",
+  "classifier.homoglyphWarning": "Posible dominio IDN/homógrafo",
+  "classifier.keywordWarning": "Palabra clave sospechosa detectada",
   "classifier.tldWarning": "TLD de baja confianza o dominio largo",
   "classifier.ipHostWarning": "Host de IP (sin dominio)",
   "classifier.shortenerWarning": "Dominio de acortador de URL detectado",
@@ -244,6 +253,16 @@
   "missing_info.email": "Ingresa una dirección de correo.",
   "missing_info.sms": "Ingresa un número o mensaje.",
   "errors.imagePickFailed": "Hubo un problema al seleccionar la imagen.",
+  "iap.modal.title": "Compra",
+  "iap.modal.purchaseFailed": "No se pudo completar la compra. Inténtalo de nuevo.",
+  "iap.modal.restoreFailed": "No se pudieron restaurar las compras. Inténtalo de nuevo.",
+  "iap.modal.notAvailable": "El servicio de compras no está disponible en este momento.",
+  "iap.modal.cancelled": "La operación fue cancelada.",
+  "ads.modal.title": "Anuncio",
+  "ads.modal.offline": "Sin conexión a internet. Conéctate para cargar el anuncio.",
+  "ads.modal.noFill": "No hay anuncios disponibles en este momento. Inténtalo más tarde.",
+  "ads.modal.notReady": "No se pudo cargar el anuncio ahora. Inténtalo de nuevo.",
+  "ads.modal.generic": "Ocurrió un problema. Inténtalo de nuevo.",
   "onboarding.next": "Siguiente",
   "onboarding.skip": "Omitir",
   "onboarding.finish": "Empezar",

@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { TouchableOpacity, Platform, AppState, NativeModules } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { TouchableOpacity, Platform, AppState, View } from 'react-native'; // View eklendi
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'; // Ref eklendi
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
-import i18n, { setLanguage } from './src/i18n';
 import { useTranslation } from 'react-i18next';
+import { SafeAreaProvider } from 'react-native-safe-area-context'; // Eklendi
+
+// Ekranlar
 import ScanSelectScreen from './src/screens/ScanSelectScreen';
 import LinkScanScreen from './src/screens/LinkScanScreen';
 import CodeScanScreen from './src/screens/CodeScanScreen';
@@ -16,49 +18,62 @@ import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
 import DisclaimerScreen from './src/screens/DisclaimerScreen';
+import OnboardingScreen, { checkOnboarding } from './src/screens/OnboardingScreen';
+
+// Bileşenler ve Utils
 import ConsentModal, { hasConsent, setConsent } from './src/components/ConsentModal';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useAppTheme } from './src/theme/ThemeContext';
-import { loadBlacklist } from './src/utils/classifier';
-import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from './src/config/adUnitIds';
-
-import OnboardingScreen, { checkOnboarding } from './src/screens/OnboardingScreen';
 import { appEvents } from './src/utils/events';
+import AdBanner from './src/components/AdBanner'; // Senin AdBanner bileşenin
 
 const Stack = createNativeStackNavigator();
+
+// Reklamın GÖRÜNMEMESİ gereken ekranlar
+const HIDDEN_AD_SCREENS = [
+  // 'Onboarding',
+  
+];
 
 function RootNavigator() {
   const { dark } = useAppTheme();
   const { t } = useTranslation();
   const [initialRoute, setInitialRoute] = useState(null);
+  
+  // Navigasyon referansı ve mevcut rota takibi
+  const navigationRef = useNavigationContainerRef();
+  const [currentRouteName, setCurrentRouteName] = useState(null);
+
   useEffect(() => {
     if (Platform.OS === 'web') return;
     
     let isMounted = true;
 
-    const initAds = async () => {
+    const initTracking = async () => {
       try {
         if (Platform.OS === 'ios') {
-          // Wait a bit for the app to be fully active
           await new Promise(resolve => setTimeout(resolve, 1000));
           const { status } = await requestTrackingPermissionsAsync();
           console.log('[App] Tracking permission status:', status);
-          if (status !== 'granted') {
-             console.log('[App] Tracking permission NOT granted. Ads may not load.');
-          }
         }
-        
-        if (!isMounted) return;
-
-        const mod = await import('react-native-google-mobile-ads');
-        await mod.default().initialize();
-        console.log('[App] MobileAds initialized');
       } catch (e) {
-        console.log('MobileAds init/permission failed:', e?.message || e);
+        console.log('Tracking permission failed:', e?.message || e);
       }
     };
 
-    initAds();
+    const initMobileAds = async () => {
+      try {
+        if (!isMounted) return;
+        const mod = await import('react-native-google-mobile-ads');
+        await mod.mobileAds().initialize();
+        console.log('[App] MobileAds initialized');
+      } catch (e) {
+        console.log('MobileAds init failed:', e?.message || e);
+      }
+    };
+
+    initTracking();
+    initMobileAds();
 
     return () => { isMounted = false; };
   }, []);
@@ -66,186 +81,106 @@ function RootNavigator() {
   useEffect(() => {
     (async () => {
       const seen = await checkOnboarding();
-      setInitialRoute(seen ? 'Home' : 'Onboarding');
+      const route = seen ? 'Home' : 'Onboarding';
+      setInitialRoute(route);
+      setCurrentRouteName(route); // İlk açılış rotasını set et
     })();
   }, []);
 
-  if (!initialRoute) return null; // or a loading spinner
+  if (!initialRoute) return null;
 
-  const ADS = {
-    REWARDED_INTERSTITIAL: rewardedInterstitialUnitId,
-    REWARDED: rewardedUnitId,
-    INTERSTITIAL: interstitialUnitId,
-  };
-
-  const runHistoryGate = async () => {
-    if (Platform.OS === 'web') return true;
-    let mod = null;
-    try { mod = await import('react-native-google-mobile-ads'); } catch {}
-    if (!mod) return true;
-    const { RewardedInterstitialAd, RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = mod;
-    const tryRewardedInterstitial = async () => {
-      if (typeof ADS.REWARDED_INTERSTITIAL !== 'string' || !ADS.REWARDED_INTERSTITIAL) throw new Error('missing_unit');
-      const ad = RewardedInterstitialAd.createForAdRequest(ADS.REWARDED_INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
-      await new Promise((resolve, reject) => {
-        let earned = false;
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
-        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
-        const cleanup = () => { ul(); ue(); uc(); ur(); };
-        ad.load();
-      });
-    };
-    const tryRewarded = async () => {
-      if (typeof ADS.REWARDED !== 'string' || !ADS.REWARDED) throw new Error('missing_unit');
-      const ad = RewardedAd.createForAdRequest(ADS.REWARDED, { requestNonPersonalizedAdsOnly: true });
-      await new Promise((resolve, reject) => {
-        let earned = false;
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); if (earned) resolve(true); else reject(new Error('closed')); });
-        const ur = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => { earned = true; });
-        const cleanup = () => { ul(); ue(); uc(); ur(); };
-        ad.load();
-      });
-    };
-    const tryInterstitial = async () => {
-      if (typeof ADS.INTERSTITIAL !== 'string' || !ADS.INTERSTITIAL) throw new Error('missing_unit');
-      const ad = InterstitialAd.createForAdRequest(ADS.INTERSTITIAL, { requestNonPersonalizedAdsOnly: true });
-      await new Promise((resolve, reject) => {
-        const ul = ad.addAdEventListener(AdEventType.LOADED, () => { ad.show(); });
-        const ue = ad.addAdEventListener(AdEventType.ERROR, () => { cleanup(); reject(new Error('ad_error')); });
-        const uc = ad.addAdEventListener(AdEventType.CLOSED, () => { cleanup(); resolve(true); });
-        const cleanup = () => { ul(); ue(); uc(); };
-        ad.load();
-      });
-    };
-    try { await tryRewardedInterstitial(); return true; } catch {}
-    try { await tryRewarded(); return true; } catch {}
-    try { await tryInterstitial(); return true; } catch {}
-    return true;
-  };
-
+  // Deep Linking Config
   const linking = {
     prefixes: ['app:///', 'secureqrlinkscanner://', 'https://', 'http://'],
     config: { 
       screens: { 
         Disclaimer: 'disclaimer',
-        LinkScan: {
-          path: 'linkscan/:url?',
-          parse: {
-            url: (url) => url ? decodeURIComponent(url) : undefined
-          }
-        },
-        ImageScan: {
-          path: 'imagescan/:imageUri?',
-          parse: {
-            imageUri: (value) => value ? decodeURIComponent(value) : undefined
-          }
-        }
+        LinkScan: { path: 'linkscan/:url?', parse: { url: (url) => url ? decodeURIComponent(url) : undefined } },
+        ImageScan: { path: 'imagescan/:imageUri?', parse: { imageUri: (value) => value ? decodeURIComponent(value) : undefined } }
       } 
     },
     async getInitialURL() {
-      // Check if app was opened from a deep link
       const url = await Linking.getInitialURL();
-      if (url != null) {
-        return url;
-      }
-      // Handle Android share intent
-      if (Platform.OS === 'android') {
-        // expo-linking should handle this, but we can add custom logic here if needed
-        return url;
-      }
       return url;
     },
     subscribe(listener) {
-      // Handle deep links while app is running
-      const onReceiveURL = ({ url }) => {
-        listener(url);
-      };
-      // Listen to incoming links from deep linking
+      const onReceiveURL = ({ url }) => listener(url);
       const subscription = Linking.addEventListener('url', onReceiveURL);
-      return () => {
-        subscription?.remove();
-      };
+      return () => subscription?.remove();
     }
   };
 
   return (
-    <NavigationContainer linking={linking}>
-      <Stack.Navigator
-        initialRouteName={initialRoute}
-        screenOptions={{
-          headerStyle: { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' },
-          headerTitleStyle: { color: dark ? '#e6edf3' : '#0b1220', fontWeight: '700' },
-          headerTintColor: dark ? '#e6edf3' : '#0b1220',
-          headerShadowVisible: true,
-          contentStyle: { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' },
-          headerBackTitle: t('actions.mainMenu'),
-          headerBackAccessibilityLabel: t('actions.mainMenu')
+    <View style={{ flex: 1, backgroundColor: dark ? '#0b0f14' : '#f2f6fb' }}>
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        onStateChange={() => {
+          // Sayfa her değiştiğinde yeni sayfanın ismini alıyoruz
+          const route = navigationRef.getCurrentRoute();
+          setCurrentRouteName(route?.name);
         }}
       >
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
-        <Stack.Screen
-          name="Home"
-          component={ScanSelectScreen}
-          options={({ navigation }) => ({
-            title: t('app.title'),
-            headerTitleAlign: 'center',
+        <Stack.Navigator
+          initialRouteName={initialRoute}
+          screenOptions={{
+            headerStyle: { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' },
+            headerTitleStyle: { color: dark ? '#e6edf3' : '#0b1220', fontWeight: '700' },
+            headerTintColor: dark ? '#e6edf3' : '#0b1220',
+            headerShadowVisible: true,
+            contentStyle: { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' },
+            headerBackTitle: t('actions.mainMenu'),
+          }}
+        >
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+          
+          <Stack.Screen
+            name="Home"
+            component={ScanSelectScreen}
+            options={({ navigation }) => ({
+              title: t('app.title'),
+              headerTitleAlign: 'center',
+              headerLeft: () => (
+                <TouchableOpacity
+                  onPress={() => { navigation.navigate('History'); }}
+                  style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#243044' : '#dbe2ea', backgroundColor: dark ? '#172031' : '#eef3f9' }}
+                >
+                  <Ionicons name="time-outline" size={20} color={dark ? '#9ecaff' : '#0066cc'} />
+                </TouchableOpacity>
+              ),
+              headerRight: () => (
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Settings')}
+                  style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#3b2c52' : '#e3def8', backgroundColor: dark ? '#1f1630' : '#f4f1fb' }}
+                >
+                  <Ionicons name="settings-outline" size={20} color={dark ? '#c1b6ff' : '#6c5ce7'} />
+                </TouchableOpacity>
+              )
+            })}
+          />
+          
+          <Stack.Screen name="LinkScan" component={LinkScanScreen} options={{ title: t('scan.link') }} />
+          <Stack.Screen name="CodeScan" component={CodeScanScreen} options={{ title: t('scan.code') }} />
+          <Stack.Screen name="ImageScan" component={ImageScanScreen} options={{ title: t('scan.image') }} />
+          <Stack.Screen name="CreateQR" component={CreateQrScreen} options={{ title: t('scan.create') }} />
+          <Stack.Screen name="History" component={HistoryScreen} options={{ title: t('history.title') }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
+          <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('settings.premiumTitle') }} />
+          <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: t('disclaimer.title'), presentation: 'modal' }} />
+        </Stack.Navigator>
 
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => { navigation.navigate('History'); }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: dark ? '#243044' : '#dbe2ea',
-                  backgroundColor: dark ? '#172031' : '#eef3f9'
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={20}
-                  color={dark ? '#9ecaff' : '#0066cc'}
-                />
-              </TouchableOpacity>
-            ),
-            headerRight: () => (
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Settings')}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: dark ? '#3b2c52' : '#e3def8',
-                  backgroundColor: dark ? '#1f1630' : '#f4f1fb'
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="settings-outline"
-                  size={20}
-                  color={dark ? '#c1b6ff' : '#6c5ce7'}
-                />
-              </TouchableOpacity>
-            )
-          })}
-        />
-        <Stack.Screen name="LinkScan" component={LinkScanScreen} options={{ title: t('scan.link') }} />
-        <Stack.Screen name="CodeScan" component={CodeScanScreen} options={{ title: t('scan.code') }} />
-        <Stack.Screen name="ImageScan" component={ImageScanScreen} options={{ title: t('scan.image') }} />
-        <Stack.Screen name="CreateQR" component={CreateQrScreen} options={{ title: t('scan.create') }} />
-        <Stack.Screen name="History" component={HistoryScreen} options={{ title: t('history.title') }} />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
-        <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('settings.premiumTitle') }} />
-        <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: t('disclaimer.title'), presentation: 'modal' }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+
+      {/* GLOBAL BANNER REKLAM 
+          1. Navigasyonun DIŞINDA (böylece sayfa değişse de sabit kalır)
+          2. Yasaklı ekranlarda GİZLİ
+          3. isFooter={true} ile Safe Area padding otomatik eklenir
+      */}
+      {currentRouteName && !HIDDEN_AD_SCREENS.includes(currentRouteName) && (
+        <AdBanner isFooter={true} placement="global_footer" />
+      )}
+      
+    </View>
   );
 }
 
@@ -257,8 +192,6 @@ export default function App() {
     (async () => {
       const ok = await hasConsent();
       setConsented(ok);
-      // Blacklist ön yükleme devre dışı (isteğe bağlı):
-      // try { await loadBlacklist(); } catch {}
     })();
   }, []);
 
@@ -273,17 +206,7 @@ export default function App() {
     return () => { try { appEvents.off?.('onboardingFinished', off); } catch {} };
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const mod = await import('react-native-google-mobile-ads');
-        try { await mod?.mobileAds()?.initialize(); } catch {}
-      } catch {}
-    })();
-  }, []);
-
-
-
+  // Premium Kontrolü
   useEffect(() => {
     const refreshPremium = async () => {
       try {
@@ -295,7 +218,7 @@ export default function App() {
           try { purchases = await iap.getAvailablePurchases(); } catch {}
           hasPremium = purchases?.some(p => p.productId === 'premium_lifetime' || p.productId === 'secure_qr_link_scanner');
         } catch {}
-        try { await AsyncStorage.setItem('premium', hasPremium ? 'true' : 'false'); } catch {}//await AsyncStorage.setItem('premium', 'false');
+        try { await AsyncStorage.setItem('premium', hasPremium ? 'true' : 'false'); } catch {}
       } catch {}
     };
     refreshPremium();
@@ -304,10 +227,12 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <RootNavigator />
-      <StatusBar style={consented === true ? 'auto' : 'light'} />
-      <ConsentModal visible={consented === false && onboardingSeen === true} onAccept={async () => { await setConsent(); setConsented(true); }} />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <RootNavigator />
+        <StatusBar style={consented === true ? 'auto' : 'light'} />
+        <ConsentModal visible={consented === false && onboardingSeen === true} onAccept={async () => { await setConsent(); setConsented(true); }} />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

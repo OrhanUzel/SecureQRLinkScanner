@@ -3,6 +3,15 @@
     "camera": "Camera access is required to scan codes.",
     "tracking": "This permission is required to serve ads tailored to your interests."
   },
+  "ads": {
+    "modal": {
+      "title": "Ad",
+      "offline": "No internet connection. Please connect to the internet to load the ad.",
+      "noFill": "No ad found to show at the moment. Please try again later.",
+      "notReady": "Ad could not be loaded at the moment. Please try again.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Select Scan Type",
   "scan.select.subtitle": "Choose what to scan and start a secure analysis.",
@@ -221,6 +230,16 @@
   "missing_info.email": "Please enter an email address.",
   "missing_info.sms": "Please enter a number or message.",
   "errors.imagePickFailed": "There was a problem selecting the image.",
+  "iap.modal.title": "Purchase",
+  "iap.modal.purchaseFailed": "The purchase could not be completed. Please try again.",
+  "iap.modal.restoreFailed": "Purchases could not be restored. Please try again.",
+  "iap.modal.notAvailable": "The purchase service is currently unavailable.",
+  "iap.modal.cancelled": "The operation was cancelled.",
+  "ads.modal.title": "Ad",
+  "ads.modal.offline": "No internet connection. Connect to the internet to load the ad.",
+  "ads.modal.noFill": "No ad is available to show right now. Please try again later.",
+  "ads.modal.notReady": "The ad could not be loaded right now. Please try again.",
+  "ads.modal.generic": "Something went wrong. Please try again.",
   "onboarding.next": "Next",
   "onboarding.skip": "Skip",
   "onboarding.finish": "Get Started",

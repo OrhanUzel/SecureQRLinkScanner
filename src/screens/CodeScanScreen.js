@@ -14,8 +14,7 @@ import { classifyInput } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdBanner from '../components/AdBanner';
-import AdvancedAdCard from '../components/AdvancedAdCard';
+
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
@@ -720,15 +719,7 @@ export default function CodeScanScreen({ navigation }) {
           </ScrollView>
         </Animated.View>
       )}
-      {showCamera ? (
-        <View style={styles.cameraAdOverlay}>
-          <AdBanner placement="global_footer" isFooter />
-        </View>
-      ) : (
-        <View style={{ padding: 0 }}>
-          <AdBanner placement="global_footer" isFooter />
-        </View>
-      )}
+
       <ConfirmOpenLinkModal
         visible={confirmVisible}
         url={pendingUrl}

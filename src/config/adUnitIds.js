@@ -4,17 +4,35 @@ import Constants from 'expo-constants';
 
 // Hardcoded test ad unit IDs from Google AdMob documentation
 const TestIds = {
-  BANNER: 'ca-app-pub-3940256099942544/6300978111',
-  INTERSTITIAL: 'ca-app-pub-3940256099942544/1033173712',
-  REWARDED: 'ca-app-pub-3940256099942544/5224354917',
-  REWARDED_INTERSTITIAL: 'ca-app-pub-3940256099942544/5354046379',
+  BANNER: Platform.select({
+    ios: 'ca-app-pub-3940256099942544/2934735716',
+    android: 'ca-app-pub-3940256099942544/6300978111',
+    default: 'ca-app-pub-3940256099942544/6300978111',
+  }),
+  INTERSTITIAL: Platform.select({
+    ios: 'ca-app-pub-3940256099942544/4411468910',
+    android: 'ca-app-pub-3940256099942544/1033173712',
+    default: 'ca-app-pub-3940256099942544/1033173712',
+  }),
+  REWARDED: Platform.select({
+    ios: 'ca-app-pub-3940256099942544/1712485313',
+    android: 'ca-app-pub-3940256099942544/5224354917',
+    default: 'ca-app-pub-3940256099942544/5224354917',
+  }),
+  REWARDED_INTERSTITIAL: Platform.select({
+    ios: 'ca-app-pub-3940256099942544/6978759866',
+    android: 'ca-app-pub-3940256099942544/5354046379',
+    default: 'ca-app-pub-3940256099942544/5354046379',
+  }),
   NATIVE: 'ca-app-pub-3940256099942544/2247696110',
   NATIVE_VIDEO: 'ca-app-pub-3940256099942544/1044960115',
   ADAPTIVE_BANNER: 'ca-app-pub-3940256099942544/9214589741',
   APP_OPEN: 'ca-app-pub-3940256099942544/9257395921',
 };
 
-const adUnitsExtra = Constants?.expoConfig?.extra?.adUnits || {};
+const expoExtra = Constants?.expoConfig?.extra || {};
+const adUnitsExtra = expoExtra?.adUnits || {};
+const useTestFallback = !!expoExtra?.adsFallbackToTestIds;
 
 const toCamel = (str) => str.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const extraKeyFromEnvKey = (envKey) => {
@@ -25,13 +43,15 @@ const extraKeyFromEnvKey = (envKey) => {
 
 const getId = (testId, iosKey, androidKey) => {
   if (__DEV__) return testId;
+  if (useTestFallback) return testId;
   const iosExtraKey = extraKeyFromEnvKey(iosKey);
   const androidExtraKey = extraKeyFromEnvKey(androidKey);
   const cfg = Platform.select({
     ios: Config[iosKey] || adUnitsExtra[iosExtraKey],
     android: Config[androidKey] || adUnitsExtra[androidExtraKey],
   });
-  return typeof cfg === 'string' && cfg.length > 0 ? cfg : null;
+  if (typeof cfg === 'string' && cfg.length > 0) return cfg;
+  return null;
 };
 
 // Banner

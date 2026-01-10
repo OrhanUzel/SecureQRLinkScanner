@@ -3,6 +3,15 @@
     "camera": "Kamera izni QR kodlarını taramak için gereklidir.",
     "tracking": "Bu izin, ilgi alanlarınıza uygun reklamlar sunabilmemiz için gereklidir."
   },
+  "ads": {
+    "modal": {
+      "title": "Reklam",
+      "offline": "İnternet bağlantısı yok. Reklamı yüklemek için internete bağlanın.",
+      "noFill": "Şu anda gösterilecek reklam bulunamadı. Lütfen biraz sonra tekrar deneyin.",
+      "notReady": "Reklam şu anda yüklenemedi. Lütfen tekrar deneyin.",
+      "generic": "Bir sorun oluştu. Lütfen tekrar deneyin."
+    }
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "Tarama Türünü Seç",
   "scan.select.subtitle": "Ne taramak istediğini seç ve güvenli analiz başlat.",
@@ -237,6 +246,16 @@
   "missing_info.email": "Lütfen e‑posta adresi girin.",
   "missing_info.sms": "Lütfen numara veya mesaj girin.",
   "errors.imagePickFailed": "Görsel seçilirken bir sorun oluştu.",
+  "iap.modal.title": "Satın Alma",
+  "iap.modal.purchaseFailed": "Satın alma işlemi tamamlanamadı. Lütfen tekrar deneyin.",
+  "iap.modal.restoreFailed": "Satın alımlar geri yüklenemedi. Lütfen tekrar deneyin.",
+  "iap.modal.notAvailable": "Satın alma servisine şu anda ulaşılamıyor.",
+  "iap.modal.cancelled": "İşlem iptal edildi.",
+  "ads.modal.title": "Reklam",
+  "ads.modal.offline": "İnternet bağlantısı yok. Reklamı yüklemek için internete bağlanın.",
+  "ads.modal.noFill": "Şu anda gösterilecek reklam bulunamadı. Lütfen biraz sonra tekrar deneyin.",
+  "ads.modal.notReady": "Reklam şu anda yüklenemedi. Lütfen tekrar deneyin.",
+  "ads.modal.generic": "Bir sorun oluştu. Lütfen tekrar deneyin.",
   "onboarding.next": "İleri",
   "onboarding.skip": "Atla",
   "onboarding.finish": "Başla",

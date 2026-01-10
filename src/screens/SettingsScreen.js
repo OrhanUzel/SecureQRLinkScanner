@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { getConsentInfo } from '../components/ConsentModal';
-import AdBanner from '../components/AdBanner';
 import Toast from '../components/Toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -32,7 +31,9 @@ export default function SettingsScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
+  const [infoModal, setInfoModal] = useState({ visible: false, title: '', message: '' });
   const insets = useSafeAreaInsets();
+  const isIOS = Platform.OS === 'ios';
 
   useEffect(() => {
     loadSettings();
@@ -75,6 +76,9 @@ export default function SettingsScreen() {
         });
         purchaseErrorRef.current = mod.purchaseErrorListener(() => {
           setProcessing(false);
+          if (!isIOS) return;
+          const message = t('iap.modal.purchaseFailed') || 'Satın alma işlemi tamamlanamadı. Lütfen tekrar deneyin.';
+          setInfoModal({ visible: true, title: t('iap.modal.title') || 'Satın Alma', message });
         });
       } catch {}
     })();
@@ -194,10 +198,27 @@ export default function SettingsScreen() {
 
   const restorePurchases = async () => {
     try {
-      if (!iap) return;
+      if (!iap) {
+        if (isIOS) {
+          setInfoModal({
+            visible: true,
+            title: t('iap.modal.title') || 'Satın Alma',
+            message: t('iap.modal.notAvailable') || 'Satın alma servisine şu anda ulaşılamıyor.',
+          });
+        }
+        return;
+      }
       setProcessing(true);
       let purchases = [];
-      try { purchases = await iap.getAvailablePurchases(); } catch {}
+      try { purchases = await iap.getAvailablePurchases(); } catch {
+        if (isIOS) {
+          setInfoModal({
+            visible: true,
+            title: t('iap.modal.title') || 'Satın Alma',
+            message: t('iap.modal.restoreFailed') || 'Satın alımlar geri yüklenemedi. Lütfen tekrar deneyin.',
+          });
+        }
+      }
       const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
       if (hasPremium) {
         await AsyncStorage.setItem('premium', 'true');
@@ -444,11 +465,32 @@ export default function SettingsScreen() {
         </Text>
       </View>
       <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} />
+      <Modal
+        visible={infoModal.visible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setInfoModal((p) => ({ ...p, visible: false }))}
+      >
+        <View style={styles.infoOverlay}>
+          <View style={[styles.infoCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoIcon}>⚠️</Text>
+              <Text style={[styles.infoTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{infoModal.title}</Text>
+            </View>
+            <Text style={[styles.infoMessage, { color: dark ? '#94a3b8' : '#475569' }]}>{infoModal.message}</Text>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#2563eb' }]}
+              onPress={() => setInfoModal((p) => ({ ...p, visible: false }))}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('actions.ok') || 'Tamam'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       </ScrollView>
 
-      <View style={[styles.bottomBanner, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', paddingBottom: Math.max(insets.bottom, 8) }]}> 
-        <AdBanner placement="settings"  />
-      </View>
+
     </View>  
   );
 }
@@ -592,8 +634,16 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    fontWeight: '500'
+    fontWeight: '600'
   },
+  infoOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  infoCard: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
+  infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  infoIcon: { fontSize: 18 },
+  infoTitle: { fontSize: 16, fontWeight: '800', flex: 1 },
+  infoMessage: { fontSize: 13, lineHeight: 18 },
+  infoCta: { marginTop: 14, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  infoCtaText: { color: '#fff', fontWeight: '800' },
   bottomBannerWrap: { 
     padding: 2,
     marginTop: 0,

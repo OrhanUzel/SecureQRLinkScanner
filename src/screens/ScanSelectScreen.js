@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdBanner from '../components/AdBanner';
 import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from '../config/adUnitIds';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -205,12 +204,7 @@ export default function ScanSelectScreen({ navigation }) {
 
       {/* Quick Stats removed per request */}
 
-      {/* Footer */}
-      {!premium && (
-        <View style={[styles.bottomBanner, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', paddingBottom: Math.max(insets.bottom, 8) }]}> 
-                <AdBanner placement="settings"  />
-              </View>
-      )}
+
     </View>
   );
 }

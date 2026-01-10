@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdvancedAdCard from '../components/AdvancedAdCard';
+
 import { Ionicons } from '@expo/vector-icons';
 
 export default function PremiumScreen() {
@@ -15,6 +15,7 @@ export default function PremiumScreen() {
   const [sub, setSub] = useState(null);
   const [offers, setOffers] = useState([]);
   const [processing, setProcessing] = useState(false);
+  const [infoModal, setInfoModal] = useState({ visible: false, title: '', message: '' });
   const SKU_SUBSCRIPTION = 'secure_qr_link_scanner';
   const SKU_LIFETIME = 'premium_lifetime';
   const purchaseUpdateRef = useRef(null);
@@ -50,7 +51,16 @@ export default function PremiumScreen() {
             setPremium(true);
           } catch {}
         });
-        purchaseErrorRef.current = mod.purchaseErrorListener(() => { setProcessing(false); });
+        purchaseErrorRef.current = mod.purchaseErrorListener((err) => {
+          setProcessing(false);
+          if (!isIOS) return;
+          const code = err?.code || err?.responseCode || err?.name || '';
+          const cancelled = code === 'E_USER_CANCELLED' || code === 'USER_CANCELLED';
+          const message = cancelled
+            ? (t('iap.modal.cancelled') || 'İşlem iptal edildi.')
+            : (t('iap.modal.purchaseFailed') || 'Satın alma işlemi tamamlanamadı. Lütfen tekrar deneyin.');
+          setInfoModal({ visible: true, title: t('iap.modal.title') || 'Satın Alma', message });
+        });
       } catch {}
     })();
     return () => {
@@ -107,7 +117,19 @@ export default function PremiumScreen() {
     try {
       setProcessing(true);
       if (iap) {
-        try { await iap.requestPurchase({ request: { android: { skus: [SKU_LIFETIME] } }, type: 'in-app' }); return; } catch {}
+        try {
+          await iap.requestPurchase({ request: { android: { skus: [SKU_LIFETIME] } }, type: 'in-app' });
+          return;
+        } catch (err) {
+          if (isIOS) {
+            const code = err?.code || err?.responseCode || err?.name || '';
+            const cancelled = code === 'E_USER_CANCELLED' || code === 'USER_CANCELLED';
+            const message = cancelled
+              ? (t('iap.modal.cancelled') || 'İşlem iptal edildi.')
+              : (t('iap.modal.purchaseFailed') || 'Satın alma işlemi tamamlanamadı. Lütfen tekrar deneyin.');
+            setInfoModal({ visible: true, title: t('iap.modal.title') || 'Satın Alma', message });
+          }
+        }
         setProcessing(false); return;
       }
       await AsyncStorage.setItem('premium', 'true');
@@ -118,10 +140,27 @@ export default function PremiumScreen() {
 
   const restorePurchases = async () => {
     try {
-      if (!iap) return;
+      if (!iap) {
+        if (isIOS) {
+          setInfoModal({
+            visible: true,
+            title: t('iap.modal.title') || 'Satın Alma',
+            message: t('iap.modal.notAvailable') || 'Satın alma servisine şu anda ulaşılamıyor.',
+          });
+        }
+        return;
+      }
       setProcessing(true);
       let purchases = [];
-      try { purchases = await iap.getAvailablePurchases(); } catch {}
+      try { purchases = await iap.getAvailablePurchases(); } catch (err) {
+        if (isIOS) {
+          setInfoModal({
+            visible: true,
+            title: t('iap.modal.title') || 'Satın Alma',
+            message: t('iap.modal.restoreFailed') || 'Satın alımlar geri yüklenemedi. Lütfen tekrar deneyin.',
+          });
+        }
+      }
       const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
       if (hasPremium) { await AsyncStorage.setItem('premium', 'true'); setPremium(true); }
       setProcessing(false);
@@ -176,9 +215,30 @@ export default function PremiumScreen() {
       ) : (
         <View style={{ marginTop: 8 }}><Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>{t('settings.premiumActive')}</Text></View>
       )}
-      <View style={{ marginTop: 16 }}>
-        <AdvancedAdCard placement="premium_bottom" />
-      </View>
+
+      <Modal
+        visible={infoModal.visible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setInfoModal((p) => ({ ...p, visible: false }))}
+      >
+        <View style={styles.infoOverlay}>
+          <View style={[styles.infoCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+            <View style={styles.infoHeader}>
+              <Ionicons name="alert-circle" size={22} color={dark ? '#facc15' : '#d97706'} />
+              <Text style={[styles.infoTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{infoModal.title}</Text>
+            </View>
+            <Text style={[styles.infoMessage, { color: dark ? '#94a3b8' : '#475569' }]}>{infoModal.message}</Text>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#2563eb' }]}
+              onPress={() => setInfoModal((p) => ({ ...p, visible: false }))}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('actions.ok') || 'Tamam'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -192,5 +252,12 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 32 },
   cardTextWrap: { flex: 1 },
   cardTitle: { fontWeight: '700', fontSize: 16 },
-  cardSub: { fontSize: 12, fontWeight: '600' }
+  cardSub: { fontSize: 12, fontWeight: '600' },
+  infoOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  infoCard: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
+  infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  infoTitle: { fontSize: 16, fontWeight: '800', flex: 1 },
+  infoMessage: { fontSize: 13, lineHeight: 18 },
+  infoCta: { marginTop: 14, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  infoCtaText: { color: '#fff', fontWeight: '800' }
 });

@@ -3,6 +3,15 @@
     "camera": "يلزم الوصول إلى الكاميرا لمسح الأكواد.",
     "tracking": "هذا الإذن ضروري لعرض إعلانات تناسب اهتماماتك."
   },
+  "ads": {
+    "modal": {
+      "title": "إعلان",
+      "offline": "لا يوجد اتصال بالإنترنت. يرجى الاتصال بالإنترنت لتحميل الإعلان.",
+      "noFill": "لم يتم العثور على إعلان لعرضه في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقًا.",
+      "notReady": "تعذر تحميل الإعلان في الوقت الحالي. يرجى المحاولة مرة أخرى.",
+      "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى."
+    }
+  },
   "app.title": "Secure QR & Link Scanner",
   "scan.select.title": "اختر نوع المسح",
   "scan.select.subtitle": "اختر ما تريد مسحه وابدأ تحليلًا آمنًا.",
@@ -75,8 +84,8 @@
   "consent.accept": "أوافق",
   "consent.decline": "خروج",
   "classifier.httpWarning": "رابط بدون HTTPS",
-  "classifier.homoglyphWarning": "احتمال نطاق متشابه/IDN",
-  "classifier.keywordWarning": "تم اكتشاف كلمة مشبوهة",
+  "classifier.homoglyphWarning": "احتمال وجود نطاق IDN/متشابه",
+  "classifier.keywordWarning": "تم اكتشاف كلمة مفتاحية مشبوهة",
   "classifier.tldWarning": "TLD منخفض الثقة أو نطاق طويل",
   "classifier.ipHostWarning": "مضيف عنوان IP (بدون نطاق)",
   "classifier.shortenerWarning": "تم اكتشاف نطاق لمُختصر الروابط",
@@ -216,6 +225,16 @@
   "missing_info.email": "يرجى إدخال عنوان بريد إلكتروني.",
   "missing_info.sms": "يرجى إدخال رقم أو رسالة.",
   "errors.imagePickFailed": "حدثت مشكلة أثناء اختيار الصورة.",
+  "iap.modal.title": "الشراء",
+  "iap.modal.purchaseFailed": "تعذّر إتمام عملية الشراء. يرجى المحاولة مرة أخرى.",
+  "iap.modal.restoreFailed": "تعذّر استعادة المشتريات. يرجى المحاولة مرة أخرى.",
+  "iap.modal.notAvailable": "خدمة الشراء غير متاحة حالياً.",
+  "iap.modal.cancelled": "تم إلغاء العملية.",
+  "ads.modal.title": "إعلان",
+  "ads.modal.offline": "لا يوجد اتصال بالإنترنت. اتصل بالإنترنت لتحميل الإعلان.",
+  "ads.modal.noFill": "لا يوجد إعلان متاح للعرض الآن. يرجى المحاولة لاحقاً.",
+  "ads.modal.notReady": "تعذّر تحميل الإعلان الآن. يرجى المحاولة مرة أخرى.",
+  "ads.modal.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
   "onboarding.next": "التالي",
   "onboarding.skip": "تخطى",
   "onboarding.finish": "ابدأ",

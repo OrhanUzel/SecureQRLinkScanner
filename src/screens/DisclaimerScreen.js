@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdBanner from '../components/AdBanner';
 
 export default function DisclaimerScreen() {
   const { t } = useTranslation();
@@ -42,9 +41,7 @@ export default function DisclaimerScreen() {
         <View style={{ height: 20 }} />
       </ScrollView>
       
-      <View style={{ borderTopWidth: 1, borderTopColor: dark ? '#30363d' : '#e1e4e8', padding: 8 }}>
-        <AdBanner placement="global_footer" isFooter />
-      </View>
+
     </View>
   );
 }

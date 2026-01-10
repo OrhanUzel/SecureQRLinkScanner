@@ -10,9 +10,8 @@ import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
-import AdBanner from '../components/AdBanner';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
-import AdvancedAdCard from '../components/AdvancedAdCard';
+
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -547,9 +546,7 @@ export default function LinkScanScreen() {
       />
       {renderLoadingStates()}
     </ScrollView>
-    <View style={[ { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}> 
-      <AdBanner placement="link" isFooter />
-    </View>
+
     </View>
   );
 }

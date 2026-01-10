@@ -597,10 +597,9 @@ function tryParseWifiFallback(raw) {
   
   // Pattern 1: "SSID password" or "SSID\npassword" format (common in some scanners)
   // SSID typically doesn't have spaces, password follows
-  const spaceMatch = s.match(/^([^\s]+)\s+(.+)$/);
-  if (spaceMatch) {
-    const [, possibleSsid, possiblePass] = spaceMatch;
-    // Validate: SSID should look like a network name (alphanumeric, underscores, hyphens)
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length === 2) {
+    const [possibleSsid, possiblePass] = parts;
     if (/^[\w\-_]+$/.test(possibleSsid) && possiblePass.length >= 4) {
       console.log('[tryParseWifiFallback] Detected pattern: SSID space PASSWORD');
       const ssid = possibleSsid;
