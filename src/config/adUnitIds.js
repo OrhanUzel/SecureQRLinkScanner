@@ -67,4 +67,4 @@ export const rewardedUnitId = getId(TestIds.REWARDED, 'IOS_REWARDED_ID', 'ANDROI
 export const rewardedInterstitialUnitId = getId(TestIds.REWARDED_INTERSTITIAL, 'IOS_REWARDED_INTERSTITIAL_ID', 'ANDROID_REWARDED_INTERSTITIAL_ID');
 
 // Native
-export const nativeUnitId = getId(TestIds.BANNER, 'IOS_NATIVE_ID', 'ANDROID_NATIVE_ID'); // No native test id; fallback banner prevents crash.
+export const nativeUnitId = getId(TestIds.NATIVE, 'IOS_NATIVE_ID', 'ANDROID_NATIVE_ID'); // No native test id; fallback banner prevents crash.

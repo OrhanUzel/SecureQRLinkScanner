@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal }
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
+import { appEvents } from '../utils/events';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -162,7 +163,11 @@ export default function PremiumScreen() {
         }
       }
       const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
-      if (hasPremium) { await AsyncStorage.setItem('premium', 'true'); setPremium(true); }
+      if (hasPremium) { 
+        await AsyncStorage.setItem('premium', 'true'); 
+        setPremium(true);
+        appEvents.emit('premiumChanged', true);
+      }
       setProcessing(false);
     } catch { setProcessing(false); }
   };

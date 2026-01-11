@@ -10,8 +10,8 @@ module.exports = {
   expo: {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
-    owner: "orhanuzel",
-    version: "1.2.2",
+    owner: "orhanuzl",
+    version: "1.2.3",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -19,7 +19,7 @@ module.exports = {
       apiBaseUrl: "https://riskapi.orhanuzel.com.tr",
       adsFallbackToTestIds: process.env.EXPO_PUBLIC_ENABLE_AD_TEST_FALLBACK === 'true',
       eas: {
-        projectId: "3dd1abe1-0e50-4dfa-9930-171cd424ef15"
+        projectId: "9a2c9943-2d49-4c92-8d4b-4584e0d66b56"
       },
       adUnits: {
         androidBanner: process.env.ANDROID_BANNER_ID,
@@ -43,19 +43,23 @@ module.exports = {
     locales: {
       tr: {
         NSCameraUsageDescription: tr.permissions?.camera,
-        NSUserTrackingUsageDescription: tr.permissions?.tracking
+        NSUserTrackingUsageDescription: tr.permissions?.tracking,
+        NSPhotoLibraryUsageDescription: tr.permissions?.photoLibrary
       },
       en: {
         NSCameraUsageDescription: en.permissions?.camera,
-        NSUserTrackingUsageDescription: en.permissions?.tracking
+        NSUserTrackingUsageDescription: en.permissions?.tracking,
+        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary
       },
       es: {
         NSCameraUsageDescription: es.permissions?.camera,
-        NSUserTrackingUsageDescription: es.permissions?.tracking
+        NSUserTrackingUsageDescription: es.permissions?.tracking,
+        NSPhotoLibraryUsageDescription: es.permissions?.photoLibrary
       },
       ar: {
         NSCameraUsageDescription: ar.permissions?.camera,
-        NSUserTrackingUsageDescription: ar.permissions?.tracking
+        NSUserTrackingUsageDescription: ar.permissions?.tracking,
+        NSPhotoLibraryUsageDescription: ar.permissions?.photoLibrary
       }
     },
     ios: {
@@ -65,13 +69,14 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         // Fallback to English if locale-specific strings fail
         NSCameraUsageDescription: en.permissions?.camera,
-        NSUserTrackingUsageDescription: en.permissions?.tracking
+        NSUserTrackingUsageDescription: en.permissions?.tracking,
+        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary
       }
     },
     android: {
-      versionCode: 11,
+      versionCode: 12,
       adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
+        foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"
       },
       edgeToEdgeEnabled: true,
@@ -99,7 +104,7 @@ module.exports = {
     },
     scheme: "secureqrlinkscanner",
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/icon.png"
     },
     plugins: [
       "./plugins/withUnityAds/app.plugin.js",
@@ -175,7 +180,9 @@ module.exports = {
         }
       ],
       "expo-secure-store",
-      "expo-tracking-transparency"
+      "expo-tracking-transparency",
+      "expo-quick-actions",
+      "@bacons/apple-targets"
     ]
   }
 };

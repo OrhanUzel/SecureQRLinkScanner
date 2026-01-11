@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'; // Ref eklendi
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
+import * as QuickActions from 'expo-quick-actions';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaProvider } from 'react-native-safe-area-context'; // Eklendi
@@ -47,6 +48,16 @@ function RootNavigator() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     
+    QuickActions.setItems([
+      {
+        title: t('scan.code') || "Güvenli Kod Tarama",
+        subtitle: t('app.title') || "Secure QR Link Scanner",
+        icon: Platform.select({ ios: "symbol:qrcode.viewfinder", android: "ic_launcher" }), 
+        id: "scan",
+        params: { href: "secureqrlinkscanner://scan" },
+      },
+    ]);
+
     let isMounted = true;
 
     const initTracking = async () => {
@@ -96,17 +107,31 @@ function RootNavigator() {
       screens: { 
         Disclaimer: 'disclaimer',
         LinkScan: { path: 'linkscan/:url?', parse: { url: (url) => url ? decodeURIComponent(url) : undefined } },
+        CodeScan: 'scan',
         ImageScan: { path: 'imagescan/:imageUri?', parse: { imageUri: (value) => value ? decodeURIComponent(value) : undefined } }
       } 
     },
     async getInitialURL() {
       const url = await Linking.getInitialURL();
-      return url;
+      if (url) return url;
+      const action = QuickActions.initial;
+      if (action?.params?.href) return action.params.href;
+      return null;
     },
     subscribe(listener) {
       const onReceiveURL = ({ url }) => listener(url);
       const subscription = Linking.addEventListener('url', onReceiveURL);
-      return () => subscription?.remove();
+      
+      const subscriptionQuickActions = QuickActions.addListener((action) => {
+        if (action?.params?.href) {
+          listener(action.params.href);
+        }
+      });
+
+      return () => {
+        subscription?.remove();
+        subscriptionQuickActions?.remove();
+      };
     }
   };
 
@@ -129,7 +154,6 @@ function RootNavigator() {
             headerTintColor: dark ? '#e6edf3' : '#0b1220',
             headerShadowVisible: true,
             contentStyle: { backgroundColor: dark ? '#0b0f14' : '#f2f6fb' },
-            headerBackTitle: t('actions.mainMenu'),
           }}
         >
           <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
@@ -219,6 +243,7 @@ export default function App() {
           hasPremium = purchases?.some(p => p.productId === 'premium_lifetime' || p.productId === 'secure_qr_link_scanner');
         } catch {}
         try { await AsyncStorage.setItem('premium', hasPremium ? 'true' : 'false'); } catch {}
+        appEvents.emit('premiumChanged', hasPremium);
       } catch {}
     };
     refreshPremium();
@@ -231,7 +256,13 @@ export default function App() {
       <ThemeProvider>
         <RootNavigator />
         <StatusBar style={consented === true ? 'auto' : 'light'} />
-        <ConsentModal visible={consented === false && onboardingSeen === true} onAccept={async () => { await setConsent(); setConsented(true); }} />
+        <ConsentModal
+          visible={consented === false && onboardingSeen === true}
+          onAccept={async () => {
+            await setConsent();
+            setConsented(true);
+          }}
+        />
       </ThemeProvider>
     </SafeAreaProvider>
   );

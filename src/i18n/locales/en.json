@@ -1,7 +1,8 @@
 {
   "permissions": {
     "camera": "Camera access is required to scan codes.",
-    "tracking": "This permission is required to serve ads tailored to your interests."
+    "tracking": "This permission is required to serve ads tailored to your interests.",
+    "photoLibrary": "Access to your photo library is required to select and scan QR codes from your saved images."
   },
   "ads": {
     "modal": {
@@ -83,6 +84,17 @@
   "settings.premiumLifetime": "Premium Lifetime",
   "settings.restorePurchases": "Restore purchases",
   "settings.restoreNone": "No purchases to restore",
+  "settings.premium_active_title": "You are Premium",
+  "settings.premium_plan_default": "Premium Plan",
+  "settings.premium_lifetime_label": "Lifetime Access",
+  "settings.premium_active_label": "Subscription Active",
+  "settings.plan_monthly": "Monthly Subscription",
+  "settings.plan_yearly": "Yearly Subscription",
+  "settings.plan_lifetime": "Lifetime Access",
+  "settings.plan_premium": "Premium Subscription",
+  "settings.expires_on": "Expires: {{date}}",
+  "settings.renews_on": "Renews: {{date}}",
+  "settings.unlimited_access": "Unlimited Access",
   "language.select": "Language",
   "consent.title": "User Consent & Legal Disclaimer",
   "consent.message": "Welcome to Secure QR & Link Scanner. Please read the following before proceeding:",
@@ -222,6 +234,8 @@
   "reward.unlocked_title": "Unlocked",
   "reward.unlocked_desc": "Custom styles are now available.",
   "premium.noAds": "Premium (No Ads)",
+  "premium.inactive.title": "Premium Coming Soon",
+  "premium.inactive.message": "Premium subscriptions are currently inactive on iOS. We are working to bring you the best experience soon. Thank you for your patience!",
   "actions.ok": "OK",
   "missing_info.title": "Missing info",
   "missing_info.url_text": "Please enter text or a URL.",

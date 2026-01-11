@@ -1,7 +1,8 @@
 {
   "permissions": {
     "camera": "Kamera izni QR kodlarını taramak için gereklidir.",
-    "tracking": "Bu izin, ilgi alanlarınıza uygun reklamlar sunabilmemiz için gereklidir."
+    "tracking": "Bu izin, ilgi alanlarınıza uygun reklamlar sunabilmemiz için gereklidir.",
+    "photoLibrary": "Kaydedilmiş görsellerinizden QR kodlarını seçip tarayabilmeniz için fotoğraf galerinize erişim gereklidir."
   },
   "ads": {
     "modal": {
@@ -86,6 +87,17 @@
   "settings.premiumLifetime": "Ömür Boyu Premium",
   "settings.restorePurchases": "Satın almaları geri yükle",
   "settings.restoreNone": "Geri yüklenecek satın alma bulunamadı",
+  "settings.premium_active_title": "Premium Üyesiniz",
+  "settings.premium_plan_default": "Premium Paket",
+  "settings.premium_lifetime_label": "Süresiz Erişim",
+  "settings.premium_active_label": "Abonelik Aktif",
+  "settings.plan_monthly": "Aylık Abonelik",
+  "settings.plan_yearly": "Yıllık Abonelik",
+  "settings.plan_lifetime": "Ömür Boyu Erişim",
+  "settings.plan_premium": "Premium Abonelik",
+  "settings.expires_on": "Bitiş: {{date}}",
+  "settings.renews_on": "Yenilenme: {{date}}",
+  "settings.unlimited_access": "Süresiz Erişim",
   "language.select": "Dil",
   "consent.title": "Kullanıcı Onayı ve Yasal Uyarı",
   "consent.message": "Secure QR & Link Scanner uygulamasına hoş geldiniz. Uygulamayı kullanmadan önce lütfen aşağıdaki yasal bilgilendirmeyi okuyunuz:",
@@ -238,6 +250,8 @@
   "reward.unlocked_title": "Kilit açıldı",
   "reward.unlocked_desc": "Özel stiller artık kullanılabilir.",
   "premium.noAds": "Reklamsız Premium",
+  "premium.inactive.title": "Premium Yakında",
+  "premium.inactive.message": "iOS tarafında premium abonelikler şu an aktif değildir. Size en iyi deneyimi sunmak için çalışıyoruz. Sabrınız için teşekkürler!",
   "actions.ok": "Tamam",
   "missing_info.title": "Eksik bilgi",
   "missing_info.url_text": "Lütfen metin veya URL girin.",

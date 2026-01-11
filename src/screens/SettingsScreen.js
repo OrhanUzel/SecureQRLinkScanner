@@ -9,6 +9,7 @@ import { getConsentInfo } from '../components/ConsentModal';
 import Toast from '../components/Toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [consentInfo, setConsentInfo] = useState(null);
   const [premium, setPremium] = useState(false);
+  const [premiumInfo, setPremiumInfo] = useState(null);
   const [iap, setIap] = useState(null);
   const [products, setProducts] = useState([]);
   const [sub, setSub] = useState(null);
@@ -28,6 +30,7 @@ export default function SettingsScreen() {
   const SKU_LIFETIME = 'premium_lifetime';
   const purchaseUpdateRef = useRef(null);
   const purchaseErrorRef = useRef(null);
+  const selectedPlanRef = useRef(null); // 'monthly', 'yearly', 'lifetime'
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
@@ -71,7 +74,33 @@ export default function SettingsScreen() {
             setProcessing(false);
             try { await mod.finishTransaction({ purchase }); } catch {}
             await AsyncStorage.setItem('premium', 'true');
+            
+            // Save premium info
+            const isLifetime = purchase.productId === SKU_LIFETIME;
+            const planType = isLifetime ? 'lifetime' : (selectedPlanRef.current || 'subscription');
+            
+            let expiryDate = null;
+            const now = new Date();
+            if (planType === 'monthly') {
+              now.setMonth(now.getMonth() + 1);
+              expiryDate = now.toISOString();
+            } else if (planType === 'yearly') {
+              now.setFullYear(now.getFullYear() + 1);
+              expiryDate = now.toISOString();
+            }
+
+            const info = {
+              type: planType,
+              planName: isLifetime 
+                ? 'Lifetime Access' 
+                : (planType === 'monthly' ? 'Monthly Subscription' : (planType === 'yearly' ? 'Yearly Subscription' : 'Premium Subscription')),
+              purchaseDate: new Date().toISOString(),
+              expiryDate
+            };
+            await AsyncStorage.setItem('premium_info', JSON.stringify(info));
+            
             setPremium(true);
+            setPremiumInfo(info);
           } catch {}
         });
         purchaseErrorRef.current = mod.purchaseErrorListener(() => {
@@ -92,17 +121,25 @@ export default function SettingsScreen() {
 
   const loadSettings = async () => {
     try {
-      const [savedLang, savedTheme, consent, premiumFlag] = await Promise.all([
+      const [savedLang, savedTheme, consent, premiumFlag, savedInfo] = await Promise.all([
         AsyncStorage.getItem(LANGUAGE_KEY),
         AsyncStorage.getItem('theme'),
         getConsentInfo(),
-        AsyncStorage.getItem('premium')
+        AsyncStorage.getItem('premium'),
+        AsyncStorage.getItem('premium_info')
       ]);
       
       if (savedLang) setLanguage(savedLang);
       if (savedTheme) setTheme(savedTheme);
       if (consent) setConsentInfo(consent);
-      if (premiumFlag === 'true') setPremium(true);
+      if (premiumFlag === 'true') {
+        setPremium(true);
+        if (savedInfo) {
+          try {
+            setPremiumInfo(JSON.parse(savedInfo));
+          } catch {}
+        }
+      }
     } catch (error) {
       console.error('Settings yüklenirken hata:', error);
     } finally {
@@ -148,6 +185,7 @@ export default function SettingsScreen() {
   const buyMonthly = async () => {
     try {
       setProcessing(true);
+      selectedPlanRef.current = 'monthly';
       const offerToken = pickOfferToken('monthly');
       if (iap && offerToken) {
         try {
@@ -165,6 +203,7 @@ export default function SettingsScreen() {
   const buyYearly = async () => {
     try {
       setProcessing(true);
+      selectedPlanRef.current = 'yearly';
       const offerToken = pickOfferToken('yearly');
       if (iap && offerToken) {
         try {
@@ -191,7 +230,16 @@ export default function SettingsScreen() {
         return;
       }
       await AsyncStorage.setItem('premium', 'true');
+      
+      const info = {
+        type: 'lifetime',
+        planName: 'Lifetime Access',
+        purchaseDate: new Date().toISOString()
+      };
+      await AsyncStorage.setItem('premium_info', JSON.stringify(info));
+      
       setPremium(true);
+      setPremiumInfo(info);
       setProcessing(false);
     } catch { setProcessing(false); }
   };
@@ -222,7 +270,20 @@ export default function SettingsScreen() {
       const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
       if (hasPremium) {
         await AsyncStorage.setItem('premium', 'true');
+        
+        // Identify plan
+        const lifetime = purchases.find(p => p.productId === SKU_LIFETIME);
+        const sub = purchases.find(p => p.productId === SKU_SUBSCRIPTION);
+        const info = {
+           type: lifetime ? 'lifetime' : 'subscription',
+           planName: lifetime ? 'Lifetime Access' : 'Premium Subscription',
+           purchaseDate: new Date().toISOString() // Approximate since we don't parse receipt here
+        };
+        await AsyncStorage.setItem('premium_info', JSON.stringify(info));
+        
         setPremium(true);
+        setPremiumInfo(info);
+        
         setToastType('success');
         setToastMessage(t('settings.premiumActive'));
         setToastVisible(true);
@@ -266,23 +327,65 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
  
-      {/* Premium */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
-          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.premiumTitle')}</Text>
+      {/* Premium Active Banner */}
+      {premium && (
+        <View style={styles.section}>
+          <LinearGradient
+            colors={dark ? ['#b45309', '#78350f'] : ['#fbbf24', '#d97706']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.premiumBanner}
+          >
+            <View style={styles.premiumBannerContent}>
+              <View style={styles.premiumIconWrap}>
+                <Text style={styles.premiumIcon}>👑</Text>
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={styles.premiumBannerTitle}>
+                  {t('settings.premium_active_title') || 'Premium Üyesiniz'}
+                </Text>
+                <Text style={styles.premiumBannerSubtitle}>
+                  {premiumInfo?.type === 'lifetime' 
+                    ? (t('settings.plan_lifetime') || 'Lifetime Access')
+                    : (premiumInfo?.type === 'monthly' ? (t('settings.plan_monthly') || 'Monthly Subscription') : (premiumInfo?.type === 'yearly' ? (t('settings.plan_yearly') || 'Yearly Subscription') : (t('settings.plan_premium') || 'Premium Subscription')))}
+                </Text>
+                
+                {premiumInfo?.expiryDate && premiumInfo?.type !== 'lifetime' && (
+                  <Text style={[styles.premiumBannerSubtitle, { fontSize: 12, opacity: 0.9, marginTop: 2 }]}>
+                    {t('settings.expires_on', { date: new Date(premiumInfo.expiryDate).toLocaleDateString() }) || `Expires: ${new Date(premiumInfo.expiryDate).toLocaleDateString()}`}
+                  </Text>
+                )}
+
+                <View style={styles.premiumBadge}>
+                  <Text style={styles.premiumBadgeText}>
+                    {premiumInfo?.type === 'lifetime'
+                      ? (t('settings.unlimited_access') || 'Unlimited Access')
+                      : (t('settings.premium_active_label') || 'Subscription Active')}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
         </View>
-        <View style={{
-          padding: 16,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: dark ? '#30363d' : '#e1e4e8',
-          backgroundColor: dark ? '#161b22' : '#ffffff'
-        }}>
-          <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
-            {t('settings.premiumDesc')}
-          </Text>
-          {!premium ? (
+      )}
+
+      {/* Premium Upsell (Only if NOT premium) */}
+      {!premium && !isIOS && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
+            <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.premiumTitle')}</Text>
+          </View>
+          <View style={{
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: dark ? '#30363d' : '#e1e4e8',
+            backgroundColor: dark ? '#161b22' : '#ffffff'
+          }}>
+            <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
+              {t('settings.premiumDesc')}
+            </Text>
             <TouchableOpacity 
               style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
               onPress={() => navigation.navigate('Premium')}
@@ -291,13 +394,9 @@ export default function SettingsScreen() {
               <Text style={styles.disclaimerIcon}>🚀</Text>
               <Text style={styles.disclaimerText}>{t('settings.removeAds')}</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={{ marginTop: 12 }}>
-              <Text style={{ color: dark ? '#7ee787' : '#2da44e', fontWeight: '700' }}>{t('settings.premiumActive')}</Text>
-            </View>
-          )}
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Tema Seçimi */}
       <View style={styles.section}>
@@ -636,20 +735,111 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600'
   },
-  infoOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  infoCard: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
-  infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  infoIcon: { fontSize: 18 },
-  infoTitle: { fontSize: 16, fontWeight: '800', flex: 1 },
-  infoMessage: { fontSize: 13, lineHeight: 18 },
-  infoCta: { marginTop: 14, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  infoCtaText: { color: '#fff', fontWeight: '800' },
-  bottomBannerWrap: { 
+  premiumBanner: {
+    borderRadius: 20,
     padding: 2,
-    marginTop: 0,
-    marginBottom: 5
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8
   },
-  bannerContainer: {
-    backgroundColor: 'transparent'
+  premiumBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 20,
+    borderRadius: 18,
+    // Slightly lighter/transparent inner if needed, or just let gradient show
+  },
+  premiumIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)'
+  },
+  premiumIcon: {
+    fontSize: 28
+  },
+  premiumBannerTitle: {
+    color: '#fff',
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
+  },
+  premiumBannerSubtitle: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  premiumBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    marginTop: 4
+  },
+  premiumBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5
+  },
+  infoOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20
+  },
+  infoCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  infoIcon: {
+    fontSize: 24
+  },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: '700'
+  },
+  infoMessage: {
+    fontSize: 14,
+    lineHeight: 20
+  },
+  infoCta: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center'
+  },
+  infoCtaText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15
   }
 });

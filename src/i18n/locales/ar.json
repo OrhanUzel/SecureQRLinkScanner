@@ -1,7 +1,8 @@
 {
   "permissions": {
     "camera": "يلزم الوصول إلى الكاميرا لمسح الأكواد.",
-    "tracking": "هذا الإذن ضروري لعرض إعلانات تناسب اهتماماتك."
+    "tracking": "هذا الإذن ضروري لعرض إعلانات تناسب اهتماماتك.",
+    "photoLibrary": "الوصول إلى مكتبة الصور مطلوب لتحديد ومسح رموز الاستجابة السريعة من الصور المحفوظة."
   },
   "ads": {
     "modal": {
@@ -147,6 +148,19 @@
   "settings.restorePurchases": "استعادة المشتريات"
   ,
   "settings.restoreNone": "لا توجد مشتريات للاستعادة",
+  "settings.premium_active_title": "أنت عضو مميز",
+  "settings.premium_plan_default": "باقة بريميوم",
+  "settings.premium_lifetime_label": "وصول مدى الحياة",
+  "settings.premium_active_label": "الاشتراك نشط",
+  "settings.plan_monthly": "اشتراك شهري",
+  "settings.plan_yearly": "اشتراك سنوي",
+  "settings.plan_lifetime": "وصول مدى الحياة",
+  "settings.plan_premium": "اشتراك بريميوم",
+  "settings.expires_on": "ينتهي: {{date}}",
+  "settings.renews_on": "يتجدد: {{date}}",
+  "settings.unlimited_access": "وصول غير محدود",
+  "premium.inactive.title": "بريميوم قريباً",
+  "premium.inactive.message": "اشتراكات بريميوم غير نشطة حالياً على iOS. نحن نعمل على تقديم أفضل تجربة لك قريباً. شكراً لصبرك!",
   "result.detectedRisks": "المخاطر المكتشفة",
   "label.wifi": "واي‑فاي",
   "label.wifiDetails": "تفاصيل الواي‑فاي",

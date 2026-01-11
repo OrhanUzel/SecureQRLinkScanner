@@ -1,7 +1,8 @@
 {
   "permissions": {
     "camera": "Se requiere acceso a la cámara para escanear códigos.",
-    "tracking": "Este permiso es necesario para mostrar anuncios adaptados a tus intereses."
+    "tracking": "Este permiso es necesario para mostrar anuncios adaptados a tus intereses.",
+    "photoLibrary": "Se requiere acceso a su biblioteca de fotos para seleccionar y escanear códigos QR de sus imágenes guardadas."
   },
   "ads": {
     "modal": {
@@ -195,6 +196,19 @@
   "settings.restorePurchases": "Restaurar compras"
   ,
   "settings.restoreNone": "No hay compras para restaurar",
+  "settings.premium_active_title": "Eres Premium",
+  "settings.premium_plan_default": "Plan Premium",
+  "settings.premium_lifetime_label": "Acceso de por vida",
+  "settings.premium_active_label": "Suscripción activa",
+  "settings.plan_monthly": "Suscripción Mensual",
+  "settings.plan_yearly": "Suscripción Anual",
+  "settings.plan_lifetime": "Acceso de por vida",
+  "settings.plan_premium": "Suscripción Premium",
+  "settings.expires_on": "Expira: {{date}}",
+  "settings.renews_on": "Renueva: {{date}}",
+  "settings.unlimited_access": "Acceso ilimitado",
+  "premium.inactive.title": "Premium Próximamente",
+  "premium.inactive.message": "Las suscripciones Premium están actualmente inactivas en iOS. Estamos trabajando para ofrecerle la mejor experiencia pronto. ¡Gracias por su paciencia!",
   "result.detectedRisks": "Riesgos detectados",
   "label.wifi": "Wi‑Fi",
   "label.wifiDetails": "Detalles de Wi‑Fi",
