@@ -380,6 +380,12 @@
   "custom_qr_change_logo": "Change logo",
   "custom_qr_remove_logo": "Remove logo",
   "custom_qr_frame_text": "Frame Text",
+  "custom_qr_dot_color": "Dot Color",
+  "custom_qr_frame_color": "Frame Color",
+  "common": {
+    "cancel": "Cancel",
+    "select": "Select"
+  },
   "custom_qr_frame_placeholder": "SCAN ME",
   "custom_qr_premium_active": "Premium active",
   "custom_qr_mode.logo": "Centered Logo",

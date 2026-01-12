@@ -226,6 +226,12 @@
   "custom_qr_change_logo": "تغيير الشعار",
   "custom_qr_remove_logo": "إزالة الشعار",
   "custom_qr_frame_text": "نص الإطار",
+  "custom_qr_dot_color": "لون النقاط",
+  "custom_qr_frame_color": "لون الإطار",
+  "common": {
+    "cancel": "إلغاء",
+    "select": "تحديد"
+  },
   "custom_qr_frame_placeholder": "SCAN ME",
   "custom_qr_premium_active": "بريميوم مفعّل",
   "custom_qr_mode.none": "كلاسيكي",

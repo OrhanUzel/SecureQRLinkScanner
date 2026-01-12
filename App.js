@@ -8,6 +8,7 @@ import * as QuickActions from 'expo-quick-actions';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Purchases from 'react-native-purchases';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -301,17 +302,19 @@ export default function App() {
   
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <RootNavigator />
-        <StatusBar style={consented === true ? 'auto' : 'light'} />
-        <ConsentModal
-          visible={consented === false && onboardingSeen === true}
-          onAccept={async () => {
-            await setConsent();
-            setConsented(true);
-          }}
-        />
-      </ThemeProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <RootNavigator />
+          <StatusBar style={consented === true ? 'auto' : 'light'} />
+          <ConsentModal
+            visible={consented === false && onboardingSeen === true}
+            onAccept={async () => {
+              await setConsent();
+              setConsented(true);
+            }}
+          />
+        </ThemeProvider>
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }

@@ -54,7 +54,7 @@ export const styles = StyleSheet.create({
   customSubtitle: { fontSize: 13, marginTop: 4 },
   customBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderRadius: 20, gap: 6 },
   customBadgeText: { fontSize: 12, fontWeight: '700' },
-  customModesRow: { flexGrow: 1, gap: 12, paddingVertical: 2 },
+  customModesRow: { flexGrow: 1, gap: 12, paddingVertical: 1 },
   customModeChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1 },
   customModeChipActive: { backgroundColor: '#2563eb', borderColor: '#2563eb', shadowColor: '#2563eb', shadowOpacity: 0.27, shadowOffset: { width: 0, height: 6 }, shadowRadius: 10, elevation: 6 },
   customModeText: { fontSize: 13, fontWeight: '600' },

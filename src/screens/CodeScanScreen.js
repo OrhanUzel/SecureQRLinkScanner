@@ -225,6 +225,15 @@ export default function CodeScanScreen({ navigation }) {
     }
   };
 
+  const handleFeedbackClose = () => {
+    closeFeedback();
+    if (pendingUrl) {
+      setTimeout(() => {
+        setConfirmVisible(true);
+      }, 300);
+    }
+  };
+
   const openVirusTotal = async () => {
     await openVirusTotalForResult(result);
   };
@@ -777,7 +786,7 @@ export default function CodeScanScreen({ navigation }) {
       />
       <FeedbackModal
         visible={feedbackVisible}
-        onClose={closeFeedback}
+        onClose={handleFeedbackClose}
         onFeedbackGiven={markFeedbackGiven}
       />
       </View>

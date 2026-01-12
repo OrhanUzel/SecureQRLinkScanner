@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import Config from 'react-native-config';
 import Constants from 'expo-constants';
 
 // Hardcoded test ad unit IDs from Google AdMob documentation
@@ -25,46 +24,40 @@ const TestIds = {
     default: 'ca-app-pub-3940256099942544/5354046379',
   }),
   NATIVE: 'ca-app-pub-3940256099942544/2247696110',
-  NATIVE_VIDEO: 'ca-app-pub-3940256099942544/1044960115',
-  ADAPTIVE_BANNER: 'ca-app-pub-3940256099942544/9214589741',
-  APP_OPEN: 'ca-app-pub-3940256099942544/9257395921',
 };
 
-const expoExtra = Constants?.expoConfig?.extra || {};
-const adUnitsExtra = expoExtra?.adUnits || {};
-const useTestFallback = !!expoExtra?.adsFallbackToTestIds;
+const extra = Constants.expoConfig?.extra || {};
+const adUnits = extra.adUnits || {};
+// Fallback to test IDs if in DEV mode or explicitly enabled in config
+const useTestFallback = __DEV__ || !!extra.adsFallbackToTestIds;
 
-const toCamel = (str) => str.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-const extraKeyFromEnvKey = (envKey) => {
-  if (!envKey) return null;
-  // IOS_BANNER_ID -> iosBanner, ANDROID_REWARDED_INTERSTITIAL_ID -> androidRewardedInterstitial
-  return toCamel(envKey.replace(/^IOS_/, 'ios_').replace(/^ANDROID_/, 'android_').replace(/_id$/i, ''));
-};
+const getUnitId = (testId, iosKey, androidKey) => {
+  if (useTestFallback) {
+    return testId;
+  }
 
-const getId = (testId, iosKey, androidKey) => {
-  if (__DEV__) return testId;
-  if (useTestFallback) return testId;
-  const iosExtraKey = extraKeyFromEnvKey(iosKey);
-  const androidExtraKey = extraKeyFromEnvKey(androidKey);
-  const cfg = Platform.select({
-    ios: Config[iosKey] || adUnitsExtra[iosExtraKey],
-    android: Config[androidKey] || adUnitsExtra[androidExtraKey],
+  const productionId = Platform.select({
+    ios: adUnits[iosKey],
+    android: adUnits[androidKey],
   });
-  if (typeof cfg === 'string' && cfg.length > 0) return cfg;
-  return null;
+
+  // If production ID is missing, you might want to return null or testId.
+  // Returning testId ensures ad components don't crash but might show test ads in prod if config is missing.
+  // Returning null might be safer for production to avoid policy violations.
+  return productionId || null;
 };
 
 // Banner
-export const bannerUnitId = getId(TestIds.BANNER, 'IOS_BANNER_ID', 'ANDROID_BANNER_ID');
+export const bannerUnitId = getUnitId(TestIds.BANNER, 'iosBanner', 'androidBanner');
 
-// Interstitial (example)
-export const interstitialUnitId = getId(TestIds.INTERSTITIAL, 'IOS_INTERSTITIAL_ID', 'ANDROID_INTERSTITIAL_ID');
+// Interstitial
+export const interstitialUnitId = getUnitId(TestIds.INTERSTITIAL, 'iosInterstitial', 'androidInterstitial');
 
 // Rewarded
-export const rewardedUnitId = getId(TestIds.REWARDED, 'IOS_REWARDED_ID', 'ANDROID_REWARDED_ID');
+export const rewardedUnitId = getUnitId(TestIds.REWARDED, 'iosRewarded', 'androidRewarded');
 
-// Rewarded interstitial
-export const rewardedInterstitialUnitId = getId(TestIds.REWARDED_INTERSTITIAL, 'IOS_REWARDED_INTERSTITIAL_ID', 'ANDROID_REWARDED_INTERSTITIAL_ID');
+// Rewarded Interstitial
+export const rewardedInterstitialUnitId = getUnitId(TestIds.REWARDED_INTERSTITIAL, 'iosRewardedInterstitial', 'androidRewardedInterstitial');
 
 // Native
-export const nativeUnitId = getId(TestIds.NATIVE, 'IOS_NATIVE_ID', 'ANDROID_NATIVE_ID'); // No native test id; fallback banner prevents crash.
+export const nativeUnitId = getUnitId(TestIds.NATIVE, 'iosNative', 'androidNative');

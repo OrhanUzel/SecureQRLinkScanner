@@ -15,6 +15,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { useAdManager } from '../hooks/useAdManager';
+import ColorPicker, { Panel1, Swatches, Preview, HueSlider } from 'reanimated-color-picker';
+import { runOnJS } from 'react-native-reanimated';
 
 const FRAME_SWATCHES = ['#0f172a', '#2563eb', '#1d4ed8', '#0f766e', '#22c55e', '#f97316', '#dc2626', '#9333ea', '#111827', '#ffffff'];
 
@@ -48,6 +50,7 @@ export default function CreateQrScreen() {
     adInfoModal: { visible: false, title: '', message: '' },
     premium: false,
     colorPickerVisible: false,
+    colorPickerTarget: 'frame',
     unlockModalVisible: false,
     rewardUnlocked: false,
     customGateVisible: false,
@@ -79,6 +82,8 @@ export default function CreateQrScreen() {
     customFrameText: '',
     frameThemeColor: '#0f172a',
     tempFrameColor: '#0f172a',
+    qrColor: '#000000',
+    tempQrColor: '#000000',
   });
 
   const [unlockState, setUnlockState] = useState({
@@ -253,7 +258,7 @@ export default function CreateQrScreen() {
         return { ...prev, unlockedModes: next };
       });
 
-      if (unlockState.pendingCustomMode) updateQr({ customMode: unlockState.pendingCustomMode });
+      if (unlockState.pendingCustomMode && unlockState.pendingCustomMode !== 'qr_color') updateQr({ customMode: unlockState.pendingCustomMode });
       if (unlockState.pendingQrType) updateQr({ type: unlockState.pendingQrType });
       
       closeCustomGate();
@@ -270,6 +275,14 @@ export default function CreateQrScreen() {
         updateUi({ adInfoModal: { visible: true, title, message } });
     }
   }, [uiState.customGateLoading, unlockState.pendingCustomMode, unlockState.pendingQrType, closeCustomGate, t, showAd]);
+
+  const onColorChange = useCallback((hex) => {
+    if (uiState.colorPickerTarget === 'qr') {
+      updateQr({ tempQrColor: hex });
+    } else {
+      updateQr({ tempFrameColor: hex });
+    }
+  }, [uiState.colorPickerTarget]);
 
   const pickCustomLogo = useCallback(async () => {
     if (uiState.logoBusy) return;
@@ -419,7 +432,7 @@ export default function CreateQrScreen() {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = qrSettings.qrColor;
     for (let y = 0; y < uiState.matrix.size; y++) {
       for (let x = 0; x < uiState.matrix.size; x++) {
         if (uiState.matrix.rows[y][x]) ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -657,7 +670,7 @@ export default function CreateQrScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.customModesRow}>
-              {CUSTOM_MODES.map((mode) => {
+              {CUSTOM_MODES.map((mode, index) => {
                 const active = qrSettings.customMode === mode.key;
                 const locked = mode.key !== 'none' && !isModeUnlocked(mode.key);
                 return (
@@ -674,6 +687,40 @@ export default function CreateQrScreen() {
                 );
               })}
             </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 0, paddingHorizontal: 4 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isModeUnlocked('qr_color')) {
+                    updateUnlock({ pendingCustomMode: 'qr_color' });
+                    updateUi({ customGateVisible: true });
+                    return;
+                  }
+                  updateQr({ tempQrColor: qrSettings.qrColor });
+                  updateUi({ colorPickerVisible: true, colorPickerTarget: 'qr' });
+                }}
+                activeOpacity={0.85}
+                style={[styles.customModeChip, { backgroundColor: dark ? '#111827' : '#f8fafc', borderColor: dark ? '#1f2937' : '#e2e8f0', flex: 1, justifyContent: 'center' }, !isModeUnlocked('qr_color') ? { opacity: 0.65 } : null]}
+              >
+                <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: qrSettings.qrColor, borderWidth: 1, borderColor: dark ? '#374151' : '#cbd5f5' }} />
+                <Text style={[styles.customModeText, { color: dark ? '#cbd5f5' : '#0f172a' }]}>{t('custom_qr_dot_color') || 'Nokta Rengi'}</Text>
+                {!isModeUnlocked('qr_color') && <Ionicons name="lock-closed" size={14} color="#f97316" />}
+              </TouchableOpacity>
+
+              {showFrameControls && (
+                <TouchableOpacity
+                  onPress={() => {
+                    updateQr({ tempFrameColor: qrSettings.frameThemeColor });
+                    updateUi({ colorPickerVisible: true, colorPickerTarget: 'frame' });
+                  }}
+                  activeOpacity={0.85}
+                  style={[styles.customModeChip, { backgroundColor: dark ? '#111827' : '#f8fafc', borderColor: dark ? '#1f2937' : '#e2e8f0', flex: 1, justifyContent: 'center' }]}
+                >
+                  <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: qrSettings.frameThemeColor, borderWidth: 1, borderColor: dark ? '#374151' : '#cbd5f5' }} />
+                  <Text style={[styles.customModeText, { color: dark ? '#cbd5f5' : '#0f172a' }]}>{t('custom_qr_frame_color') || 'Çerçeve Rengi'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {showLogoControls && (
               <View style={[styles.logoCard, { borderColor: dark ? '#1f2937' : '#dbe2ea', backgroundColor: dark ? '#0d1523' : '#ffffff' }]}>
@@ -713,10 +760,6 @@ export default function CreateQrScreen() {
                   maxLength={FRAME_TEXT_MAX}
                 />
                 <Text style={[styles.frameCounter, { color: dark ? '#8b98a5' : '#475569' }]}>{(qrSettings.customFrameText || '').length}/{FRAME_TEXT_MAX}</Text>
-                <TouchableOpacity style={[styles.colorButton, { backgroundColor: qrSettings.frameThemeColor }]} onPress={() => { updateQr({ tempFrameColor: qrSettings.frameThemeColor }); updateUi({ colorPickerVisible: true }); }} activeOpacity={0.9}>
-                  <Ionicons name="color-palette" size={18} color="#fff" />
-                  <Text style={[styles.colorButtonText, { color: qrSettings.frameThemeColor.toLowerCase() === '#ffffff' ? '#0b1220' : '#fff' }]}>{t('custom_qr_color_pick') || 'Tema rengi seç'}</Text>
-                </TouchableOpacity>
               </View>
             )}
 
@@ -757,7 +800,7 @@ export default function CreateQrScreen() {
                     {uiState.matrix.rows.map((row, y) => (
                       <View key={y} style={{ flexDirection: 'row' }}>
                         {row.map((on, x) => (
-                          <View key={x} style={{ width: cellSize, height: cellSize, backgroundColor: on ? '#000' : '#fff' }} />
+                          <View key={x} style={{ width: cellSize, height: cellSize, backgroundColor: on ? qrSettings.qrColor : '#fff' }} />
                         ))}
                       </View>
                     ))}
@@ -810,23 +853,41 @@ export default function CreateQrScreen() {
       <Modal visible={uiState.colorPickerVisible} transparent animationType="fade" onRequestClose={() => updateUi({ colorPickerVisible: false })}>
         <View style={styles.colorModalOverlay}>
           <View style={[styles.colorModalCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
-            <Text style={[styles.colorModalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('custom_qr_color_pick') || 'Tema rengi seç'}</Text>
-            <View style={styles.colorSwatchGrid}>
-              {FRAME_SWATCHES.map((c) => {
-                const active = qrSettings.tempFrameColor === c;
-                return (
-                  <TouchableOpacity key={c} style={[styles.colorSwatch, { backgroundColor: c, borderColor: active ? '#2563eb' : dark ? '#1f2937' : '#e5e7eb' }, active ? styles.colorSwatchActive : null]} onPress={() => updateQr({ tempFrameColor: c })} activeOpacity={0.85}>
-                    {active && <Ionicons name="checkmark" size={18} color={c === '#ffffff' ? '#111827' : '#fff'} />}
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={[styles.colorModalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+              {uiState.colorPickerTarget === 'qr' ? (t('custom_qr_dot_color') || 'Nokta Rengi') : (t('custom_qr_color_pick') || 'Tema rengi seç')}
+            </Text>
+            
+            <View style={{ height: 260, width: '100%', marginVertical: 8 }}>
+              <ColorPicker 
+                style={{ flex: 1 }} 
+                value={uiState.colorPickerTarget === 'qr' ? qrSettings.tempQrColor : qrSettings.tempFrameColor} 
+                onComplete={({ hex }) => {
+                  'worklet';
+                  runOnJS(onColorChange)(hex);
+                }}
+              >
+                <Preview 
+                  hideInitialColor 
+                  textStyle={{ color: dark ? '#fff' : '#000', fontSize: 16, fontWeight: 'bold' }} 
+                />
+                <Panel1 style={{ marginTop: 12, borderRadius: 12 }} />
+                <HueSlider style={{ marginTop: 12, borderRadius: 12, height: 24 }} />
+              </ColorPicker>
             </View>
+
             <View style={styles.colorModalActions}>
               <TouchableOpacity style={[styles.colorBtn, { backgroundColor: dark ? '#1f2937' : '#e5e7eb' }]} onPress={() => updateUi({ colorPickerVisible: false })} activeOpacity={0.85}>
-                <Text style={[styles.colorBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('close') || 'Kapat'}</Text>
+                <Text style={[styles.colorBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('common.cancel') || 'İptal'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.colorBtn, { backgroundColor: '#2563eb' }]} onPress={() => { updateQr({ frameThemeColor: qrSettings.tempFrameColor }); updateUi({ colorPickerVisible: false }); }} activeOpacity={0.9}>
-                <Text style={[styles.colorBtnText, { color: '#fff' }]}>{t('actions.ok') || 'Tamam'}</Text>
+              <TouchableOpacity style={[styles.colorBtn, { backgroundColor: '#2563eb' }]} onPress={() => { 
+                if (uiState.colorPickerTarget === 'qr') {
+                  updateQr({ qrColor: qrSettings.tempQrColor });
+                } else {
+                  updateQr({ frameThemeColor: qrSettings.tempFrameColor });
+                }
+                updateUi({ colorPickerVisible: false }); 
+              }} activeOpacity={0.9}>
+                <Text style={[styles.colorBtnText, { color: '#fff' }]}>{t('common.select') || 'Seç'}</Text>
               </TouchableOpacity>
             </View>
           </View>

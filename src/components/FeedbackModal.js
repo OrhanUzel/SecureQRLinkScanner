@@ -34,19 +34,8 @@ export default function FeedbackModal({ visible, onClose, onFeedbackGiven }) {
 
       if (isAvailable) {
         console.log('Requesting In-App Review...');
-        await InAppReview.RequestInAppReview()
-          .then((hasFlowFinishedSuccessfully) => {
-             console.log('InAppReview flow finished:', hasFlowFinishedSuccessfully);
-             if (hasFlowFinishedSuccessfully) {
-               // The flow has finished. The API does not indicate whether the user
-               // reviewed or not, or even whether the review dialog was shown.
-               // Thus, no matter the result, we continue our app flow.
-             }
-          })
-          .catch((error) => {
-             console.log('InAppReview.RequestInAppReview() failed:', error);
-             throw error; // Re-throw to hit the main catch block
-          });
+        const hasFlowFinishedSuccessfully = await InAppReview.RequestInAppReview();
+        console.log('InAppReview flow finished:', hasFlowFinishedSuccessfully);
       } else {
         console.log('InAppReview not available, falling back to store link');
         

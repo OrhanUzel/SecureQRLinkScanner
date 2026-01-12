@@ -187,6 +187,12 @@
   "custom_qr_change_logo": "Logoyu değiştir",
   "custom_qr_remove_logo": "Logoyu kaldır",
   "custom_qr_frame_text": "Çerçeve Yazısı",
+  "custom_qr_dot_color": "Nokta Rengi",
+  "custom_qr_frame_color": "Çerçeve Rengi",
+  "common": {
+    "cancel": "İptal",
+    "select": "Seç"
+  },
   "custom_qr_frame_placeholder": "SCAN ME",
   "custom_qr_premium_active": "Premium aktif",
   "unlocked": "Açık",

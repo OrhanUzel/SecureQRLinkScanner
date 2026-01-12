@@ -322,11 +322,20 @@ export default function LinkScanScreen() {
 
   const openLink = async () => {
     if (result?.normalized && result.isUrl) {
+      setPendingUrl(result.normalized);
       const triggered = await registerLinkOpen();
       if (!triggered) {
-        setPendingUrl(result.normalized);
         setConfirmVisible(true);
       }
+    }
+  };
+
+  const handleFeedbackClose = () => {
+    closeFeedback();
+    if (pendingUrl) {
+      setTimeout(() => {
+        setConfirmVisible(true);
+      }, 300);
     }
   };
 

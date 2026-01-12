@@ -175,6 +175,12 @@
   "custom_qr_change_logo": "Cambiar logo",
   "custom_qr_remove_logo": "Eliminar logo",
   "custom_qr_frame_text": "Texto del marco",
+  "custom_qr_dot_color": "Color de Puntos",
+  "custom_qr_frame_color": "Color del Marco",
+  "common": {
+    "cancel": "Cancelar",
+    "select": "Seleccionar"
+  },
   "custom_qr_frame_placeholder": "SCAN ME",
   "custom_qr_premium_active": "Premium activo",
   "custom_qr_mode.logo": "Logo centrado",

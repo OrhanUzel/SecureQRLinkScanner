@@ -1,5 +1,3 @@
-require('dotenv').config();
-
 // Load locale files for dynamic iOS permission texts
 const tr = require('./src/i18n/locales/tr.json');
 const en = require('./src/i18n/locales/en.json');
