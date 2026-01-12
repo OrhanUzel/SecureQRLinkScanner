@@ -81,6 +81,11 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Amazon SDK'sını RevenueCat içinden çıkar
+configurations.all {
+    exclude group: 'com.revenuecat.purchases', module: 'purchases-store-amazon'
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 

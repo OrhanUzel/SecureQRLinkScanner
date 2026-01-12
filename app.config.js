@@ -11,7 +11,7 @@ module.exports = {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
     owner: "orhanuzl",
-    version: "1.2.3",
+    version: "1.4.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -65,6 +65,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.orhanuzel.secureqrlinkscanner",
+      "appleTeamId": process.env.APPLE_TEAM_ID,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         // Fallback to English if locale-specific strings fail
@@ -107,8 +108,10 @@ module.exports = {
       favicon: "./assets/icon.png"
     },
     plugins: [
+      "expo-mail-composer",
       "./plugins/withUnityAds/app.plugin.js",
       "./plugins/withShareIntent/app.plugin.js",
+
       [
         "expo-build-properties",
         {

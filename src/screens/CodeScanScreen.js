@@ -18,6 +18,8 @@ import { useAppTheme } from '../theme/ThemeContext';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
+import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
+import FeedbackModal from '../components/FeedbackModal';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import OfflineNotice from '../components/OfflineNotice';
@@ -27,12 +29,14 @@ export default function CodeScanScreen({ navigation }) {
   const { t, i18n } = useTranslation();
   const { dark } = useAppTheme();
   const { width, height } = useWindowDimensions();
+  const { feedbackVisible, closeFeedback, registerLinkOpen, markFeedbackGiven } = useFeedbackSystem();
   const compact = width < 360 || height < 640;
   const isFocused = useIsFocused();
   const cameraRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const isScanning = useRef(false);
+  const lastScannedValue = useRef(null);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [result, setResult] = useState(null);
@@ -91,9 +95,12 @@ export default function CodeScanScreen({ navigation }) {
   };
 
   const onBarcodeScanned = async (ev) => {
-    // Debug: Log full event structure to understand data format
-    console.log('[CodeScanScreen] Barcode event keys:', Object.keys(ev || {}));
-    console.log('[CodeScanScreen] Barcode event:', JSON.stringify(ev, null, 2));
+    if (isScanning.current) return;
+
+    if (__DEV__) {
+      console.log('[CodeScanScreen] Barcode event keys:', Object.keys(ev || {}));
+      console.log('[CodeScanScreen] Barcode event:', JSON.stringify(ev, null, 2));
+    }
     
     // Try multiple properties from different expo-camera versions
     const barcode = Array.isArray(ev?.barcodes) ? ev.barcodes[0] : ev;
@@ -116,18 +123,24 @@ export default function CodeScanScreen({ navigation }) {
     if (data.includes('%')) {
       try {
         const decoded = decodeURIComponent(data);
-        console.log('[CodeScanScreen] URL decoded data:', decoded);
+        if (__DEV__) console.log('[CodeScanScreen] URL decoded data:', decoded);
         data = decoded;
       } catch (e) {
-        console.log('[CodeScanScreen] URL decode failed, using original');
+        if (__DEV__) console.log('[CodeScanScreen] URL decode failed, using original');
       }
     }
     
-    console.log('[CodeScanScreen] All barcode props:', barcode ? Object.keys(barcode) : 'no barcode');
-    console.log('[CodeScanScreen] Extracted data:', data);
-    console.log('[CodeScanScreen] Data char codes (first 20):', data.substring(0, 20).split('').map(c => c.charCodeAt(0)));
+    if (__DEV__) {
+      console.log('[CodeScanScreen] All barcode props:', barcode ? Object.keys(barcode) : 'no barcode');
+      console.log('[CodeScanScreen] Extracted data:', data);
+      console.log('[CodeScanScreen] Data char codes (first 20):', data.substring(0, 20).split('').map(c => c.charCodeAt(0)));
+    }
     
     if (!data) return;
+    if (data === lastScannedValue.current) return;
+
+    isScanning.current = true;
+    lastScannedValue.current = data;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     let usomBad = false;
@@ -135,24 +148,24 @@ export default function CodeScanScreen({ navigation }) {
       usomBad = await isUsomUnsafe(data) || await isUsomHostUnsafe(data);
     } catch {}
 
-    setLoading(true);
-    let scannedType = (ev?.barcodes?.[0]?.type || ev?.type || '').toString().toLowerCase();
-    
-    // Fallback: detect from length if type is missing
-    if (!scannedType || scannedType === '' || scannedType === '0') {
-       const digits = data.replace(/[^0-9]/g, '');
-       if (digits.length === 13) scannedType = 'ean13';
-       else if (digits.length === 8) scannedType = 'ean8';
-       else if (digits.length === 12) scannedType = 'upc_a';
-    }
-
-    console.log('[CodeScanScreen] Calling classifyInput with data:', data, 'scannedType:', scannedType);
-    const res = classifyInput(data, scannedType);
-    console.log('[CodeScanScreen] Classification result:', res.type, 'isUrl:', res.isUrl, 'normalized:', res.normalized);
-    let updated = { ...res };
-
-    // Uzaktan risk kontrolü (yalnızca URL ise)
     try {
+      setLoading(true);
+      let scannedType = (ev?.barcodes?.[0]?.type || ev?.type || '').toString().toLowerCase();
+      
+      // Fallback: detect from length if type is missing
+      if (!scannedType || scannedType === '' || scannedType === '0') {
+         const digits = data.replace(/[^0-9]/g, '');
+         if (digits.length === 13) scannedType = 'ean13';
+         else if (digits.length === 8) scannedType = 'ean8';
+         else if (digits.length === 12) scannedType = 'upc_a';
+      }
+
+      if (__DEV__) console.log('[CodeScanScreen] Calling classifyInput with data:', data, 'scannedType:', scannedType);
+      const res = classifyInput(data, scannedType);
+      if (__DEV__) console.log('[CodeScanScreen] Classification result:', res.type, 'isUrl:', res.isUrl, 'normalized:', res.normalized);
+      let updated = { ...res };
+
+      // Uzaktan risk kontrolü (yalnızca URL ise)
       if (res.isUrl) {
         const remote = await checkRisk(res.normalized);
         if (remote?.error) {
@@ -173,39 +186,43 @@ export default function CodeScanScreen({ navigation }) {
           updated = { ...res, level: 'unsafe', reasons };
         }
       }
-    } catch {
-      setOffline(true);
-    }
+      if (usomBad) {
+        const reasons = [ ...(updated.reasons || []), 'classifier.usomWarning' ];
+        updated = { ...updated, level: 'unsafe', reasons };
+      }
 
-    if (usomBad) {
-      const reasons = [ ...(updated.reasons || []), 'classifier.usomWarning' ];
-      updated = { ...updated, level: 'unsafe', reasons };
-    }
-
-    setResult(updated);
-    setShowCamera(false);
-    
-    const eligible = ['ean13', 'ean8', 'upc_a'];
-    const country = eligible.includes(scannedType) ? detectGs1Country(data, t) : null;
-    setGs1Country(country);
-    
-    // WiFi şifreleri geçmişe kaydedilmesin
-    if (updated.type !== 'wifi') {
+      setResult(updated);
+      setShowCamera(false);
+      
+      const eligible = ['ean13', 'ean8', 'upc_a'];
+      const country = eligible.includes(scannedType) ? detectGs1Country(data, t) : null;
+      setGs1Country(country);
+      
       saveHistory({ 
         content: updated.normalized, 
         level: updated.level,
         type: scannedType,
+        contentType: updated.type,
+        wifi: updated.type === 'wifi' ? (updated.wifi || null) : null,
         country: country
       });
+    } catch {
+      setOffline(true);
+      isScanning.current = false;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const openLink = () => {
+  const openLink = async () => {
     if (!result?.normalized) return;
     const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized;
     setPendingUrl(raw);
-    setConfirmVisible(true);
+
+    const triggered = await registerLinkOpen();
+    if (!triggered) {
+      setConfirmVisible(true);
+    }
   };
 
   const openVirusTotal = async () => {
@@ -248,6 +265,8 @@ export default function CodeScanScreen({ navigation }) {
     setResult(null);
     setGs1Country(null);
     setShowCamera(true);
+    isScanning.current = false;
+    lastScannedValue.current = null;
   };
 
   const goToHome = () => {
@@ -280,6 +299,12 @@ export default function CodeScanScreen({ navigation }) {
       </View>
     );
   }
+
+  // Determine if result is a barcode for UI display
+  const isBarcode = result && result.type !== 'wifi' && !result.isUrl && (
+    (result.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128', 'codabar', 'itf'].includes(result.type.toLowerCase())) ||
+    (result.normalized && /^\d+$/.test(result.normalized) && [8, 12, 13].includes(result.normalized.length))
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}>
@@ -351,7 +376,7 @@ export default function CodeScanScreen({ navigation }) {
         >
           <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ paddingBottom: 24 }, compact ? { paddingHorizontal: 12 } : { paddingHorizontal: 20 }]}>
           <View style={[styles.resultHeader, compact ? { marginBottom: 16, gap: 12 } : null]}>
-            {gs1Country && result.type !== 'wifi' ? (
+            {(isBarcode || gs1Country) && result.type !== 'wifi' ? (
               <>
                 <Ionicons 
                   name="barcode-outline" 
@@ -385,6 +410,7 @@ export default function CodeScanScreen({ navigation }) {
               <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}
               >
                 {result.isUrl ? (t('label.url') || 'URL') : (
+                  (isBarcode || gs1Country) ? (t('scan.barcodeDetected') || 'Barkod') :
                   result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
                   result.type === 'tel' ? (t('label.phone') || 'Telefon') :
                   result.type === 'email' ? (t('label.email') || 'E‑posta') :
@@ -400,9 +426,10 @@ export default function CodeScanScreen({ navigation }) {
               </Text>
             </View>
 
-            {gs1Country && result.type !== 'wifi' && (
+            {(isBarcode || gs1Country) && result.type !== 'wifi' && (
               <View style={[styles.resultSection, styles.countrySection, { alignItems: 'center' }]}>
-                {gs1Country.key === 'country.israel' ? (
+                {gs1Country ? (
+                  gs1Country.key === 'country.israel' ? (
                   <View style={[styles.countryBadge, { 
                     backgroundColor: dark ? 'rgba(207,34,46,0.15)' : '#fff5f5', 
                     borderColor: dark ? 'rgba(207,34,46,0.4)' : '#cf222e',
@@ -433,7 +460,14 @@ export default function CodeScanScreen({ navigation }) {
                   <View style={[styles.countryBadge, { alignSelf: 'center' }]}>
                     <Text style={{ fontSize: 24 }}>{gs1Country.flag}</Text>
                     <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-                      {t('scan.producedIn') || 'Üretim Yeri: '} {gs1Country.name}
+                      {!['country.issn', 'country.isbn', 'country.refund_receipt', 'country.coupon_common', 'country.coupon'].includes(gs1Country.key) && (t('scan.producedIn') || 'Üretim Yeri: ')} {gs1Country.name}
+                    </Text>
+                  </View>
+                )
+                ) : (
+                  <View style={[styles.countryBadge, { alignSelf: 'center', backgroundColor: dark ? '#1b2330' : '#f3f4f6', padding: 12, borderRadius: 12 }]}>
+                    <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+                      {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
                     </Text>
                   </View>
                 )}
@@ -610,7 +644,7 @@ export default function CodeScanScreen({ navigation }) {
                       },
                       color: '#0969da',
                     },
-                    gs1Country && {
+                    (isBarcode || gs1Country) && {
                       key: 'google',
                       label: t('actions.searchGoogle') || 'Google\'da Ara',
                       icon: 'logo-google',
@@ -618,7 +652,7 @@ export default function CodeScanScreen({ navigation }) {
                         const url = 'https://www.google.com/search?q=' + encodeURIComponent(result.normalized);
                         openExternalUrl(url);
                       },
-                      color: '#0bd920e4',
+                      color: '#4285f4',
                     },
                     {
                       key: 'share',
@@ -725,7 +759,11 @@ export default function CodeScanScreen({ navigation }) {
         url={pendingUrl}
         onConfirm={async () => {
           setConfirmVisible(false);
-          if (pendingUrl) { try { await Linking.openURL(pendingUrl); } catch {} }
+          if (pendingUrl) { 
+            try { 
+              await Linking.openURL(pendingUrl); 
+            } catch {} 
+          }
           setPendingUrl(null);
         }}
         onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
@@ -736,6 +774,11 @@ export default function CodeScanScreen({ navigation }) {
         onHide={() => setToastVisible(false)}
         dark={dark}
         style={{ position: 'absolute', bottom: Math.max(insets.bottom + 72, 72), left: 20, right: 20 }}
+      />
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={closeFeedback}
+        onFeedbackGiven={markFeedbackGiven}
       />
       </View>
     </View>

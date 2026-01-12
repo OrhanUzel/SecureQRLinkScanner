@@ -11,6 +11,8 @@ import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
+import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
+import FeedbackModal from '../components/FeedbackModal';
 
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
@@ -23,6 +25,7 @@ let globalInitialUrlHandled = false;
 
 export default function LinkScanScreen() {
   const { t, i18n } = useTranslation();
+  const { feedbackVisible, closeFeedback, registerLinkOpen, markFeedbackGiven } = useFeedbackSystem();
   const { dark } = useAppTheme();
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
@@ -317,10 +320,13 @@ export default function LinkScanScreen() {
     navigation.navigate('Home');
   };
 
-  const openLink = () => {
+  const openLink = async () => {
     if (result?.normalized && result.isUrl) {
-      setPendingUrl(result.normalized);
-      setConfirmVisible(true);
+      const triggered = await registerLinkOpen();
+      if (!triggered) {
+        setPendingUrl(result.normalized);
+        setConfirmVisible(true);
+      }
     }
   };
 
@@ -526,6 +532,11 @@ export default function LinkScanScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={closeFeedback}
+        onFeedbackGiven={markFeedbackGiven}
+      />
       <ConfirmOpenLinkModal 
         visible={confirmVisible}
         url={pendingUrl}
@@ -544,8 +555,8 @@ export default function LinkScanScreen() {
         onHide={() => setToastVisible(false)}
         dark={dark}
       />
-      {renderLoadingStates()}
     </ScrollView>
+    {renderLoadingStates()}
 
     </View>
   );

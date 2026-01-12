@@ -1,13 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { TouchableOpacity, Platform, AppState, View } from 'react-native'; // View eklendi
+import { TouchableOpacity, Platform, AppState, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'; // Ref eklendi
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import * as QuickActions from 'expo-quick-actions';
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaProvider } from 'react-native-safe-area-context'; // Eklendi
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Purchases from 'react-native-purchases';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
 
 // Ekranlar
 import ScanSelectScreen from './src/screens/ScanSelectScreen';
@@ -18,6 +22,7 @@ import CreateQrScreen from './src/screens/CreateQrScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
+import PaywallScreen from './src/screens/PaywallScreen';
 import DisclaimerScreen from './src/screens/DisclaimerScreen';
 import OnboardingScreen, { checkOnboarding } from './src/screens/OnboardingScreen';
 
@@ -167,17 +172,19 @@ function RootNavigator() {
               headerLeft: () => (
                 <TouchableOpacity
                   onPress={() => { navigation.navigate('History'); }}
-                  style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#243044' : '#dbe2ea', backgroundColor: dark ? '#172031' : '#eef3f9' }}
+                  activeOpacity={0.7}
+                  style={Platform.OS === 'ios' ? { paddingHorizontal: 10 } : { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#243044' : '#dbe2ea', backgroundColor: dark ? '#172031' : '#eef3f9' }}
                 >
-                  <Ionicons name="time-outline" size={20} color={dark ? '#9ecaff' : '#0066cc'} />
+                  <Ionicons name="time-outline" size={24} color={dark ? '#9ecaff' : '#0066cc'} />
                 </TouchableOpacity>
               ),
               headerRight: () => (
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Settings')}
-                  style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#3b2c52' : '#e3def8', backgroundColor: dark ? '#1f1630' : '#f4f1fb' }}
+                  activeOpacity={0.7}
+                  style={Platform.OS === 'ios' ? { paddingHorizontal: 10 } : { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18, borderWidth: 1, borderColor: dark ? '#3b2c52' : '#e3def8', backgroundColor: dark ? '#1f1630' : '#f4f1fb' }}
                 >
-                  <Ionicons name="settings-outline" size={20} color={dark ? '#c1b6ff' : '#6c5ce7'} />
+                  <Ionicons name="settings-outline" size={24} color={dark ? '#c1b6ff' : '#6c5ce7'} />
                 </TouchableOpacity>
               )
             })}
@@ -190,6 +197,7 @@ function RootNavigator() {
           <Stack.Screen name="History" component={HistoryScreen} options={{ title: t('history.title') }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
           <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('settings.premiumTitle') }} />
+          <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: t('disclaimer.title'), presentation: 'modal' }} />
         </Stack.Navigator>
 
@@ -230,27 +238,67 @@ export default function App() {
     return () => { try { appEvents.off?.('onboardingFinished', off); } catch {} };
   }, []);
 
-  // Premium Kontrolü
+  
+  // RevenueCat Setup & Premium Check
   useEffect(() => {
-    const refreshPremium = async () => {
+    const setupRevenueCat = async () => {
       try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        let hasPremium = false;
+        Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+
+        if (Platform.OS === 'android') {
+          await Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_FOR_GOOGLE_PLAY });
+        } else if (Platform.OS === 'ios') {
+          await Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_FOR_APPLE });
+        }
+
+        const updatePremiumStatus = async (customerInfo) => {
+          try {
+            // Check for ANY active entitlement, not just 'pro'
+            // This is more robust if the user used a different identifier in RevenueCat
+            const activeEntitlements = customerInfo?.entitlements?.active || {};
+            const isPro = Object.keys(activeEntitlements).length > 0;
+            
+            await AsyncStorage.setItem('premium', isPro ? 'true' : 'false');
+            appEvents.emit('premiumChanged', isPro);
+          } catch (e) {
+            console.log('Error updating premium status:', e);
+          }
+        };
+
+        // Initial check
         try {
-          const iap = await import('react-native-iap');
-          let purchases = [];
-          try { purchases = await iap.getAvailablePurchases(); } catch {}
-          hasPremium = purchases?.some(p => p.productId === 'premium_lifetime' || p.productId === 'secure_qr_link_scanner');
+          const customerInfo = await Purchases.getCustomerInfo();
+          await updatePremiumStatus(customerInfo);
         } catch {}
-        try { await AsyncStorage.setItem('premium', hasPremium ? 'true' : 'false'); } catch {}
-        appEvents.emit('premiumChanged', hasPremium);
-      } catch {}
+
+        // Listener for real-time updates
+        Purchases.addCustomerInfoUpdateListener(updatePremiumStatus);
+        
+        // Load offerings
+        await Purchases.getOfferings();
+      } catch (e) {
+        console.log('RevenueCat setup failed:', e);
+      }
     };
-    refreshPremium();
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refreshPremium(); });
-    return () => { try { sub?.remove?.(); } catch {} };
+
+    setupRevenueCat();
+
+    // AppState listener to refresh status on resume
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        Purchases.getCustomerInfo().catch(() => {});
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
+
+
+
+  
   return (
     <SafeAreaProvider>
       <ThemeProvider>

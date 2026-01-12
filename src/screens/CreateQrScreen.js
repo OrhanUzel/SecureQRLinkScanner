@@ -902,7 +902,7 @@ export default function CreateQrScreen() {
                   setTimeout(() => { updateUi({ adInfoModal: { visible: true, title: t('premium.inactive.title'), message: t('premium.inactive.message') } }); }, 300);
                 } else {
                   closeCustomGate();
-                  navigation.navigate('Premium');
+                  navigation.navigate('Paywall');
                 }
               }}
               activeOpacity={0.9}

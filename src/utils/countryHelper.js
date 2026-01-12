@@ -116,6 +116,11 @@ export function detectGs1Country(raw, t) {
     [[940, 949], 'country.newZealand', '🇳🇿'],
     [[955, 955], 'country.malaysia', '🇲🇾'],
     [[958, 958], 'country.macao', '🇲🇴'],
+    [[977, 977], 'country.issn', '📰'],
+    [[978, 979], 'country.isbn', '📚'],
+    [[980, 980], 'country.refund_receipt', '🧾'],
+    [[981, 984], 'country.coupon_common', '🎟️'],
+    [[990, 999], 'country.coupon', '🎟️'],
   ];
 
   for (const [[from, to], key, flag] of ranges) {

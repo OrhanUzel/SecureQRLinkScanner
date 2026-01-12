@@ -20,11 +20,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../components/Toast';
 import * as FileSystem from 'expo-file-system';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
+import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
+import FeedbackModal from '../components/FeedbackModal';
 import OfflineNotice from '../components/OfflineNotice';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function ImageScanScreen() {
   const { t, i18n } = useTranslation();
+  const { feedbackVisible, closeFeedback, registerLinkOpen, markFeedbackGiven } = useFeedbackSystem();
   const { dark } = useAppTheme();
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
@@ -317,15 +320,14 @@ export default function ImageScanScreen() {
             }
             setGs1Country(country);
             setError(null);
-            // WiFi şifreleri geçmişe kaydedilmesin
-            if (updated.type !== 'wifi') {
-              saveHistory({ 
-                content: updated.normalized, 
-                level: updated.level,
-                type: scannedType,
-                country: country
-              });
-            }
+            saveHistory({ 
+              content: updated.normalized, 
+              level: updated.level,
+              type: scannedType,
+              contentType: updated.type,
+              wifi: updated.type === 'wifi' ? (updated.wifi || null) : null,
+              country: country
+            });
           } else {
             setResult(null);
             setError(t('scan.noCodeFound') || 'Bu görselde kod bulunamadı');
@@ -528,6 +530,11 @@ export default function ImageScanScreen() {
     );
   };
 
+  const isBarcode = result && result.type !== 'wifi' && !result.isUrl && (
+    (result.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128', 'codabar', 'itf'].includes(result.type.toLowerCase())) ||
+    (result.normalized && /^\d+$/.test(result.normalized) && [8, 12, 13].includes(result.normalized.length))
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: dark ? '#0b0f14' : '#e9edf3' }}>
     <OfflineNotice
@@ -618,7 +625,8 @@ export default function ImageScanScreen() {
               )}
             </Text>
             <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0b1220', textAlign: 'center' }]} selectable>{result.normalized}</Text>
-            {gs1Country && result.type !== 'wifi' ? (
+            {/* Show Barcode UI if isBarcode is true OR if gs1Country is present */ }
+            {(isBarcode || gs1Country) && result.type !== 'wifi' ? (
               <View style={{alignItems: 'center', gap: 4, marginTop: 8}}>
                 <View style={[styles.badge, { backgroundColor: dark ? '#1f6feb' : '#0969da' }]}> 
                   <Ionicons name="scan-outline" size={16} color="#fff" />
@@ -631,9 +639,10 @@ export default function ImageScanScreen() {
             ) : (
               <RiskBadge level={result.level} />
             )}
-            {gs1Country && result.type !== 'wifi' && (
+            {(isBarcode || gs1Country) && result.type !== 'wifi' && (
               <View style={[styles.resultSection, styles.countrySection, { alignItems: 'center', width: '100%' }]}>
-                {gs1Country.key === 'country.israel' ? (
+                {gs1Country ? (
+                  gs1Country.key === 'country.israel' ? (
                   <View style={[styles.countryBadge, { 
                     backgroundColor: dark ? 'rgba(207,34,46,0.15)' : '#fff5f5', 
                     borderColor: dark ? 'rgba(207,34,46,0.4)' : '#cf222e',
@@ -665,7 +674,14 @@ export default function ImageScanScreen() {
                   <View style={[styles.countryBadge, { alignSelf: 'center' }]}>
                     <Text style={{ fontSize: 24 }}>{gs1Country.flag}</Text>
                     <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-                      {t('scan.producedIn') || 'Üretim Yeri: '} {gs1Country.name}
+                      {!['country.issn', 'country.isbn', 'country.refund_receipt', 'country.coupon_common', 'country.coupon'].includes(gs1Country.key) && (t('scan.producedIn') || 'Üretim Yeri: ')} {gs1Country.name}
+                    </Text>
+                  </View>
+                )
+                ) : (
+                  <View style={[styles.countryBadge, { alignSelf: 'center', backgroundColor: dark ? '#1b2330' : '#f3f4f6', padding: 12, borderRadius: 12 }]}>
+                    <Text style={[styles.countryText, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+                      {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
                     </Text>
                   </View>
                 )}
@@ -733,7 +749,7 @@ export default function ImageScanScreen() {
               compact={compact}
               style={{ marginTop: 12 }}
               buttons={[
-                gs1Country && result.type !== 'wifi' && {
+                (isBarcode || gs1Country) && result.type !== 'wifi' && {
                   key: 'google',
                   label: t('actions.searchGoogle') || 'Google\'da Ara',
                   icon: 'logo-google',
@@ -745,10 +761,10 @@ export default function ImageScanScreen() {
                   key: 'open',
                   label: t('actions.openLink') || 'Linki Aç',
                   icon: 'open-outline',
-                  onPress: () => { const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized; setPendingUrl(raw); setConfirmVisible(true); },
+                  onPress: async () => { const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized; const triggered = await registerLinkOpen(); if (!triggered) { setPendingUrl(raw); setConfirmVisible(true); } },
                   color: '#2da44e',
                 },
-                {
+                result.type !== 'wifi' && {
                   key: 'copy',
                   label: t('actions.copy') || 'Kopyala',
                   icon: 'copy-outline',
@@ -762,7 +778,14 @@ export default function ImageScanScreen() {
                   onPress: async () => { try { await Clipboard.setStringAsync(result.wifi.password); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {} },
                   color: '#0f766e',
                 },
-                {
+                result?.type === 'wifi' && result?.wifi?.password && result?.wifi?.security !== 'nopass' && {
+                  key: 'share_wifi',
+                  label: t('actions.share') || 'Paylaş',
+                  icon: 'share-outline',
+                  onPress: async () => { try { await Share.share({ message: result.wifi.password }); } catch {} },
+                  color: '#6c5ce7',
+                },
+                result.type !== 'wifi' && {
                   key: 'share',
                   label: t('actions.share') || 'Paylaş',
                   icon: 'share-outline',
@@ -835,6 +858,12 @@ export default function ImageScanScreen() {
           </View>
         </>
       )}
+      
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={closeFeedback}
+        onFeedbackGiven={markFeedbackGiven}
+      />
       
       <ConfirmOpenLinkModal
         visible={confirmVisible}

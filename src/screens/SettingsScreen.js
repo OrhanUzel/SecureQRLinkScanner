@@ -388,7 +388,7 @@ export default function SettingsScreen() {
             </Text>
             <TouchableOpacity 
               style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
-              onPress={() => navigation.navigate('Premium')}
+              onPress={() => navigation.navigate('Paywall')}
               activeOpacity={0.8}
             >
               <Text style={styles.disclaimerIcon}>🚀</Text>

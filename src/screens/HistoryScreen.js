@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useLayoutEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, Alert, Modal, Share, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -19,6 +19,7 @@ export default function HistoryScreen() {
   const { t } = useTranslation();
   const { dark } = useAppTheme();
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [premium, setPremium] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [pendingUrl, setPendingUrl] = useState(null);
@@ -40,12 +41,15 @@ export default function HistoryScreen() {
   }, [items]);
 
   const load = async () => {
+    setLoading(true);
     try {
       const raw = await AsyncStorage.getItem('scan_history');
       setItems(raw ? JSON.parse(raw) : []);
     } catch (err) {
       console.error('Failed to load history:', err);
       setItems([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -65,9 +69,18 @@ export default function HistoryScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity style={styles.clearBtn} onPress={confirmClearAll}>
-          <Ionicons name="trash-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.clearText}>{t('history.clear')}</Text>
+        <TouchableOpacity 
+          style={Platform.OS === 'ios' ? styles.clearBtnIOS : styles.clearBtn} 
+          onPress={confirmClearAll}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name="trash-outline" 
+            size={Platform.OS === 'ios' ? 22 : 16} 
+            color={Platform.OS === 'ios' ? '#d00000' : '#fff'} 
+            style={{ marginRight: 6 }} 
+          />
+          <Text style={Platform.OS === 'ios' ? styles.clearTextIOS : styles.clearText}>{t('history.clear')}</Text>
         </TouchableOpacity>
       ),
     });
@@ -75,6 +88,11 @@ export default function HistoryScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}> 
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={dark ? '#67e8f9' : '#0284c7'} />
+        </View>
+      ) : (
       <FlatList
         style={{}}
         data={items}
@@ -112,14 +130,23 @@ export default function HistoryScreen() {
             return { text: level || 'Bilinmiyor', color: '#6e7781', icon: 'help-circle' };
           };
           const levelInfo = getLevelInfo(item.level);
-          const isUrl = item.content && (item.content.startsWith('http://') || item.content.startsWith('https://') || item.content.includes('.'));
-          
-          // Enhanced barcode detection
           const cleanContent = item.content ? String(item.content).trim() : '';
+          const upperContent = cleanContent.toUpperCase();
+          const contentType = (item.contentType || item.type || '').toString().toLowerCase();
+          const isWifi = contentType === 'wifi' || upperContent.startsWith('WIFI:');
+          const isUrl = !isWifi && !!(cleanContent && (cleanContent.startsWith('http://') || cleanContent.startsWith('https://') || cleanContent.includes('.')));
+          const wifi = isWifi ? (item.wifi || null) : null;
+          const wifiSsid = wifi?.ssid || '';
+          const wifiSecurity = wifi?.security || '';
+          const wifiPassword = wifi?.password || '';
+          const wifiHidden = typeof wifi?.hidden === 'boolean' ? wifi.hidden : null;
+          const wifiTitle = wifiSsid ? `Wi‑Fi: ${wifiSsid}` : 'Wi‑Fi';
+
+          // Enhanced barcode detection
           const isNumeric = /^\d+$/.test(cleanContent);
           const len = cleanContent.length;
-          const isBarcode = (item.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128'].includes(item.type.toLowerCase())) ||
-                            (isNumeric && (len === 8 || len === 12 || len === 13));
+          const isBarcode = !isWifi && ((item.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128'].includes(item.type.toLowerCase())) ||
+                            (isNumeric && (len === 8 || len === 12 || len === 13)));
           
           let country = item.country;
           if (!country && isBarcode) {
@@ -133,7 +160,7 @@ export default function HistoryScreen() {
                   style={[styles.itemContent, { color: dark ? '#9ecaff' : '#0b1220' }]}
                   numberOfLines={2}
                 >
-                  {item.content}
+                  {isWifi ? wifiTitle : item.content}
                 </Text>
                 <TouchableOpacity
                   onPress={() => deleteItem(index)}
@@ -145,7 +172,12 @@ export default function HistoryScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.itemRow}>
-                {isBarcode ? (
+                {isWifi ? (
+                  <View style={[styles.levelBadge, { backgroundColor: '#0f766e' }]}>
+                    <Ionicons name="wifi-outline" size={16} color="#fff" />
+                    <Text style={styles.levelText}>{t('label.wifi') || 'Wi‑Fi'}</Text>
+                  </View>
+                ) : isBarcode ? (
                   <View style={[styles.levelBadge, { backgroundColor: '#b80ddfff' }]}>
                     <Ionicons name="barcode-outline" size={16} color="#fff" />
                     <Text style={[styles.levelText, styles.badgeLabel]}>{t('scan.barcodeDetected') || 'Barkod'}</Text>
@@ -164,6 +196,22 @@ export default function HistoryScreen() {
                   </View>
                 )}
               </View>
+              {isWifi && (
+                <View style={[styles.wifiDetails, { backgroundColor: dark ? '#0b0f14' : '#f4f6f8', borderColor: dark ? '#1b2330' : '#dde3ea' }]}>
+                  <Text style={[styles.wifiDetailText, { color: dark ? '#c9d1d9' : '#24292f' }]}>
+                    {(t('wifi.ssid') || 'SSID') + ': '} {wifiSsid || '-'}
+                  </Text>
+                  <Text style={[styles.wifiDetailText, { color: dark ? '#c9d1d9' : '#24292f' }]}>
+                    {(t('wifi.security') || 'Güvenlik') + ': '} {wifiSecurity || '-'}
+                  </Text>
+                  <Text style={[styles.wifiDetailText, { color: dark ? '#c9d1d9' : '#24292f' }]}>
+                    {(t('wifi.hidden') || 'Gizli') + ': '} {wifiHidden === null ? '-' : (wifiHidden ? (t('confirm.yes') || 'Evet') : (t('confirm.no') || 'Hayır'))}
+                  </Text>
+                  <Text style={[styles.wifiDetailText, { color: dark ? '#c9d1d9' : '#24292f' }]}>
+                    {(t('wifi.password') || 'Şifre') + ': '} {wifiPassword || '-'}
+                  </Text>
+                </View>
+              )}
               {isBarcode && country && country.key === 'country.israel' && (
                 <View style={styles.tagRow}>
                   <View style={[styles.tag, { backgroundColor: dark ? '#1f2937' : '#1f2937' }]}>
@@ -188,7 +236,7 @@ export default function HistoryScreen() {
               {isUrl && (
                 <View style={styles.buttonRow}>
                   <TouchableOpacity 
-                    style={[styles.actionButton, styles.openButton, { backgroundColor: dark ? '#0969da' : '#0969da' }]}
+                    style={[styles.actionButton, styles.openButton, { backgroundColor: dark ? '#6c5ce7' : '#6c5ce7' }]}
                     onPress={() => {
                       const url = item.content.startsWith('http') ? item.content : `https://${item.content}`;
                       setPendingUrl(url);
@@ -215,6 +263,42 @@ export default function HistoryScreen() {
                     <Ionicons name="copy" size={18} color="#fff" />
                     <Text style={styles.actionButtonText}>{t('actions.copy')}</Text>
                   </TouchableOpacity>
+                </View>
+              )}
+              {isWifi && (
+                <View style={styles.buttonRow}>
+                           <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: dark ? '#6c5ce7' : '#6c5ce7', opacity: wifiPassword ? 1 : 0.5 }]}
+                    onPress={async () => {
+                      if (!wifiPassword) return;
+                      try {
+                        await Share.share({ message: wifiPassword });
+                      } catch {}
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="share-outline" size={18} color="#fff" />
+                    <Text style={styles.actionButtonText}>{t('actions.share') || 'Paylaş'}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: dark ? '#2f9e44' : '#2f9e44', opacity: wifiPassword ? 1 : 0.5 }]}
+                    onPress={async () => {
+                      if (!wifiPassword) return;
+                      try {
+                        await Clipboard.setStringAsync(wifiPassword);
+                        setToastMsg(t('toast.copied'));
+                        setToastVisible(true);
+                      } catch (e) {
+                        Alert.alert('Hata', 'Kopyalanamadı: ' + e.message);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="key-outline" size={18} color="#fff" />
+                    <Text style={styles.actionButtonText}>{t('actions.copyWifiPassword') || 'Wi‑Fi Şifresini Kopyala'}</Text>
+                  </TouchableOpacity>
+         
                 </View>
               )}
               {isBarcode && (
@@ -254,6 +338,7 @@ export default function HistoryScreen() {
         }}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
       />
+      )}
 
       <ConfirmOpenLinkModal 
         visible={confirmVisible}
@@ -367,7 +452,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '700' },
   clearBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#d00000', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  clearBtnIOS: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
   clearText: { color: '#fff', fontWeight: '700' },
+  clearTextIOS: { color: '#d00000', fontWeight: '600', fontSize: 17 },
   item: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, overflow: 'hidden' },
   itemHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   itemContent: { fontWeight: '600', fontSize: 15, marginBottom: 4, flex: 1, flexShrink: 1 },
@@ -390,7 +477,9 @@ const styles = StyleSheet.create({
   timestampRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   timestamp: { fontSize: 11, textAlign: 'right' },
   buttonRow: { flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' },
-  googleButton: { backgroundColor: '#0969da' },
+  googleButton: { backgroundColor: '#6c5ce7' },
+  wifiDetails: { padding: 10, borderRadius: 10, borderWidth: 1, gap: 4 },
+  wifiDetailText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   tagRow: { flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' },
   tag: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999 },
   tagText: { color: '#fff', fontWeight: '700', fontSize: 12 },
