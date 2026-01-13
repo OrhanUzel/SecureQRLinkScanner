@@ -770,7 +770,7 @@ export default function CodeScanScreen({ navigation }) {
           setConfirmVisible(false);
           if (pendingUrl) { 
             try { 
-              await Linking.openURL(pendingUrl); 
+              await openExternalUrl(pendingUrl); 
             } catch {} 
           }
           setPendingUrl(null);

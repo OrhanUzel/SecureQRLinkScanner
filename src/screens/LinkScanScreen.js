@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
-import { openVirusTotalForResult } from '../utils/linkActions';
+import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
@@ -123,19 +123,6 @@ export default function LinkScanScreen() {
           handleSharedUrl(sharedUrl);
           navigation.setParams({ url: undefined });
         }
-      } else {
-        // Param yoksa ve paylaşım oturumu değilse varsayılan duruma dön
-        hasHandledSharedLink.current = false;
-        lastHandledSharedUrl.current = null;
-        isShareSession.current = false;
-        setInput('');
-        setResult(null);
-        setLoading(false);
-        setOffline(false);
-        setPendingUrl(null);
-        setConfirmVisible(false);
-        setToastVisible(false);
-        setToastMsg('');
       }
 
       return () => {
@@ -146,22 +133,7 @@ export default function LinkScanScreen() {
     }, [route.params])
   );
 
-  // Reset screen when navigating away so it opens in default state next time
-  useEffect(() => {
-    const unsubscribe = navigation?.addListener?.('blur', () => {
-      hasHandledSharedLink.current = false;
-      isShareSession.current = false;
-      setInput('');
-      setResult(null);
-      setLoading(false);
-      setOffline(false);
-      setPendingUrl(null);
-      setConfirmVisible(false);
-      setToastVisible(false);
-      setToastMsg('');
-    });
-    return () => unsubscribe?.();
-  }, [navigation]);
+ 
 
   const onAnalyzeWithUrl = async (urlToAnalyze) => {
     if (!urlToAnalyze || !urlToAnalyze.trim()) return;
@@ -457,7 +429,7 @@ export default function LinkScanScreen() {
                       })()}</Text>}
                       {d.url && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomUrlLabel')}</Text> {d.url}</Text>}
                       {(d.ipAddress || d.ip) && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomIpLabel')}</Text> {d.ipAddress || d.ip}</Text>}
-                      <TouchableOpacity onPress={() => Linking.openURL('https://www.usom.gov.tr/adres')} style={{marginTop: 8}}>
+                      <TouchableOpacity onPress={() => openExternalUrl('https://www.usom.gov.tr/adres')} style={{marginTop: 8}}>
                         <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline', fontWeight: '500'}}>{t('remoteRisk.usomReference')}</Text>
                       </TouchableOpacity>
                     </View>
@@ -470,7 +442,7 @@ export default function LinkScanScreen() {
                        <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}>
                          {t('remoteRisk.githubFoundText', { repo: r.repo })}
                        </Text>
-                       <TouchableOpacity onPress={() => Linking.openURL(r.url)} style={{marginTop: 4}}>
+                       <TouchableOpacity onPress={() => openExternalUrl(r.url)} style={{marginTop: 4}}>
                           <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline'}}>{t('remoteRisk.viewSource')}</Text>
                        </TouchableOpacity>
                      </View>
@@ -552,7 +524,7 @@ export default function LinkScanScreen() {
         onConfirm={async () => {
           setConfirmVisible(false);
           if (pendingUrl) {
-            try { await Linking.openURL(pendingUrl); } catch (e) { Alert.alert('Hata', e.message); }
+            try { await openExternalUrl(pendingUrl); } catch (e) { Alert.alert('Hata', e.message); }
           }
           setPendingUrl(null);
         }}

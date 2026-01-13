@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
@@ -21,103 +21,19 @@ export default function SettingsScreen() {
   const [consentInfo, setConsentInfo] = useState(null);
   const [premium, setPremium] = useState(false);
   const [premiumInfo, setPremiumInfo] = useState(null);
-  const [iap, setIap] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [sub, setSub] = useState(null);
-  const [offers, setOffers] = useState([]);
-  const [processing, setProcessing] = useState(false);
-  const SKU_SUBSCRIPTION = 'secure_qr_link_scanner';
-  const SKU_LIFETIME = 'premium_lifetime';
-  const purchaseUpdateRef = useRef(null);
-  const purchaseErrorRef = useRef(null);
-  const selectedPlanRef = useRef(null); // 'monthly', 'yearly', 'lifetime'
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
   const [infoModal, setInfoModal] = useState({ visible: false, title: '', message: '' });
   const insets = useSafeAreaInsets();
-  const isIOS = Platform.OS === 'ios';
 
   useEffect(() => {
     loadSettings();
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadSettings();
     });
     return unsubscribe;
   }, [navigation]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const mod = await import('react-native-iap');
-        if (!mounted) return;
-        setIap(mod);
-        try { await mod.initConnection(); } catch {}
-        try { await mod.flushFailedPurchasesCachedAsPendingAndroid?.(); } catch {}
-        let items = [];
-        try { items = await mod.fetchProducts({ skus: [SKU_SUBSCRIPTION], type: 'subs' }); } catch {}
-        if (items && items.length) {
-          setSub(items[0]);
-          const subOffers = items[0]?.subscriptionOfferDetailsAndroid || [];
-          setOffers(subOffers);
-        }
-        let oneTime = [];
-        try { oneTime = await mod.fetchProducts({ skus: [SKU_LIFETIME], type: 'in-app' }); } catch {}
-        if (oneTime && oneTime.length) setProducts(oneTime);
-
-        purchaseUpdateRef.current = mod.purchaseUpdatedListener(async (purchase) => {
-          try {
-            setProcessing(false);
-            try { await mod.finishTransaction({ purchase }); } catch {}
-            await AsyncStorage.setItem('premium', 'true');
-            
-            // Save premium info
-            const isLifetime = purchase.productId === SKU_LIFETIME;
-            const planType = isLifetime ? 'lifetime' : (selectedPlanRef.current || 'subscription');
-            
-            let expiryDate = null;
-            const now = new Date();
-            if (planType === 'monthly') {
-              now.setMonth(now.getMonth() + 1);
-              expiryDate = now.toISOString();
-            } else if (planType === 'yearly') {
-              now.setFullYear(now.getFullYear() + 1);
-              expiryDate = now.toISOString();
-            }
-
-            const info = {
-              type: planType,
-              planName: isLifetime 
-                ? 'Lifetime Access' 
-                : (planType === 'monthly' ? 'Monthly Subscription' : (planType === 'yearly' ? 'Yearly Subscription' : 'Premium Subscription')),
-              purchaseDate: new Date().toISOString(),
-              expiryDate
-            };
-            await AsyncStorage.setItem('premium_info', JSON.stringify(info));
-            
-            setPremium(true);
-            setPremiumInfo(info);
-          } catch {}
-        });
-        purchaseErrorRef.current = mod.purchaseErrorListener(() => {
-          setProcessing(false);
-          if (!isIOS) return;
-          const message = t('iap.modal.purchaseFailed') || 'Satın alma işlemi tamamlanamadı. Lütfen tekrar deneyin.';
-          setInfoModal({ visible: true, title: t('iap.modal.title') || 'Satın Alma', message });
-        });
-      } catch {}
-    })();
-    return () => {
-      try { purchaseUpdateRef.current?.remove(); } catch {}
-      try { purchaseErrorRef.current?.remove(); } catch {}
-      try { iap?.endConnection?.(); } catch {}
-      mounted = false;
-    };
-  }, []);
 
   const loadSettings = async () => {
     try {
@@ -166,134 +82,6 @@ export default function SettingsScreen() {
 
   const openDisclaimer = () => {
     navigation.navigate('Disclaimer');
-  };
-
-  const pickOfferToken = (basePlanId) => {
-    const found = offers?.find(o => o.basePlanId === basePlanId);
-    const token = found?.offerToken || found?.offerIdToken || found?.offerTokenCode;
-    if (token) return token;
-    const first = offers?.[0]?.offerToken || sub?.subscriptionOfferDetailsAndroid?.[0]?.offerToken;
-    return first || null;
-  };
-
-  const formatOfferPrice = (basePlanId) => {
-    const found = offers?.find(o => o.basePlanId === basePlanId);
-    const phase = found?.pricingPhases?.pricingPhaseList?.[0];
-    return phase?.formattedPrice || phase?.priceFormatted || null;
-  };
-
-  const buyMonthly = async () => {
-    try {
-      setProcessing(true);
-      selectedPlanRef.current = 'monthly';
-      const offerToken = pickOfferToken('monthly');
-      if (iap && offerToken) {
-        try {
-          await iap.requestPurchase({
-            request: { android: { skus: [SKU_SUBSCRIPTION], subscriptionOffers: [{ sku: SKU_SUBSCRIPTION, offerToken }] } },
-            type: 'subs'
-          });
-          return;
-        } catch {}
-      }
-      setProcessing(false);
-    } catch { setProcessing(false); }
-  };
-
-  const buyYearly = async () => {
-    try {
-      setProcessing(true);
-      selectedPlanRef.current = 'yearly';
-      const offerToken = pickOfferToken('yearly');
-      if (iap && offerToken) {
-        try {
-          await iap.requestPurchase({
-            request: { android: { skus: [SKU_SUBSCRIPTION], subscriptionOffers: [{ sku: SKU_SUBSCRIPTION, offerToken }] } },
-            type: 'subs'
-          });
-          return;
-        } catch {}
-      }
-      setProcessing(false);
-    } catch { setProcessing(false); }
-  };
-
-  const buyLifetime = async () => {
-    try {
-      setProcessing(true);
-      if (iap) {
-        try {
-          await iap.requestPurchase({ request: { android: { skus: [SKU_LIFETIME] } }, type: 'in-app' });
-          return;
-        } catch {}
-        setProcessing(false);
-        return;
-      }
-      await AsyncStorage.setItem('premium', 'true');
-      
-      const info = {
-        type: 'lifetime',
-        planName: 'Lifetime Access',
-        purchaseDate: new Date().toISOString()
-      };
-      await AsyncStorage.setItem('premium_info', JSON.stringify(info));
-      
-      setPremium(true);
-      setPremiumInfo(info);
-      setProcessing(false);
-    } catch { setProcessing(false); }
-  };
-
-  const restorePurchases = async () => {
-    try {
-      if (!iap) {
-        if (isIOS) {
-          setInfoModal({
-            visible: true,
-            title: t('iap.modal.title') || 'Satın Alma',
-            message: t('iap.modal.notAvailable') || 'Satın alma servisine şu anda ulaşılamıyor.',
-          });
-        }
-        return;
-      }
-      setProcessing(true);
-      let purchases = [];
-      try { purchases = await iap.getAvailablePurchases(); } catch {
-        if (isIOS) {
-          setInfoModal({
-            visible: true,
-            title: t('iap.modal.title') || 'Satın Alma',
-            message: t('iap.modal.restoreFailed') || 'Satın alımlar geri yüklenemedi. Lütfen tekrar deneyin.',
-          });
-        }
-      }
-      const hasPremium = purchases?.some(p => p.productId === SKU_LIFETIME || p.productId === SKU_SUBSCRIPTION);
-      if (hasPremium) {
-        await AsyncStorage.setItem('premium', 'true');
-        
-        // Identify plan
-        const lifetime = purchases.find(p => p.productId === SKU_LIFETIME);
-        const sub = purchases.find(p => p.productId === SKU_SUBSCRIPTION);
-        const info = {
-           type: lifetime ? 'lifetime' : 'subscription',
-           planName: lifetime ? 'Lifetime Access' : 'Premium Subscription',
-           purchaseDate: new Date().toISOString() // Approximate since we don't parse receipt here
-        };
-        await AsyncStorage.setItem('premium_info', JSON.stringify(info));
-        
-        setPremium(true);
-        setPremiumInfo(info);
-        
-        setToastType('success');
-        setToastMessage(t('settings.premiumActive'));
-        setToastVisible(true);
-      } else {
-        setToastType('error');
-        setToastMessage(t('settings.restoreNone'));
-        setToastVisible(true);
-      }
-      setProcessing(false);
-    } catch { setProcessing(false); }
   };
 
   const languages = [
@@ -370,7 +158,7 @@ export default function SettingsScreen() {
       )}
 
       {/* Premium Upsell (Only if NOT premium) */}
-      {!premium && !isIOS && (
+      {!premium && Platform.OS !== 'ios' && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>

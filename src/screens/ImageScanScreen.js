@@ -24,6 +24,7 @@ import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
 import OfflineNotice from '../components/OfflineNotice';
 import * as ImageManipulator from 'expo-image-manipulator';
+import ImageInverter from '../components/ImageInverter';
 
 export default function ImageScanScreen() {
   const { t, i18n } = useTranslation();
@@ -49,6 +50,7 @@ export default function ImageScanScreen() {
   const [pickerDismissed, setPickerDismissed] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
+  const [inversionTask, setInversionTask] = useState(null);
   const hasHandledSharedImage = useRef(false);
   const lastHandledSharedImageUri = useRef(null);
 
@@ -83,6 +85,34 @@ export default function ImageScanScreen() {
         );
       } catch (e) {
         console.log('[ImageScanScreen Native] Meta read failed', e?.message || e);
+      }
+
+      // Invert color variants (for dark QR codes on dark backgrounds or light on light)
+      try {
+        // Resize first to reasonable size for SVG rendering to avoid memory issues and speed up
+        const resizedForInvert = await ImageManipulator.manipulateAsync(
+          rawUri,
+          [{ resize: { width: 800 } }], 
+          { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+        );
+        
+        if (resizedForInvert?.uri) {
+           // Trigger the React state to render the ImageInverter component
+           const invertedUri = await new Promise((resolve) => {
+             setInversionTask({ 
+               uri: resizedForInvert.uri, 
+               width: resizedForInvert.width || 800, 
+               height: resizedForInvert.height || 800, 
+               resolve 
+             });
+           });
+           
+           if (invertedUri) {
+             variants.push(invertedUri);
+           }
+        }
+      } catch (e) {
+        console.log('[ImageScanScreen Native] Inversion failed', e);
       }
 
       // Center crops to reduce influence of thick frames
@@ -134,82 +164,8 @@ export default function ImageScanScreen() {
 
     try {
       if (Platform.OS === 'web') {
-        const { BrowserMultiFormatReader } = await import('@zxing/library');
-        const reader = new BrowserMultiFormatReader();
-        const zxResult = await reader.decodeFromImageUrl(uri);
-        const data = zxResult?.getText?.();
-        if (data) {
-          setPreparing(false);
-          // Get format exactly like CodeScanScreen: simple and direct
-          const rawFormat = zxResult?.getBarcodeFormat?.()?.toString?.() || '';
-          let scannedType = rawFormat.toLowerCase().trim();
-          
-          // Debug: Log original format info
-          console.log('[ImageScanScreen Web] Raw format:', rawFormat, 'Data:', data.substring(0, 20) + '...');
-          
-          // Normalize format: handle all variations (EAN_13, EAN13, ean_13, ean13, EAN, etc.)
-          if (scannedType.includes('ean') && (scannedType.includes('13') || scannedType === 'ean')) {
-            scannedType = 'ean13';
-          } else if (scannedType.includes('ean') && scannedType.includes('8')) {
-            scannedType = 'ean8';
-          } else if (scannedType.includes('upc') && (scannedType.includes('a') || scannedType === 'upc')) {
-            scannedType = 'upc_a';
-          } else if (scannedType.includes('upc') && scannedType.includes('e')) {
-            scannedType = 'upc_e';
-          }
-          
-          // If format is still unknown or empty, detect from data length (like CodeScanScreen fallback)
-          if (!scannedType || scannedType === '' || scannedType.trim() === '') {
-            const digitsOnly = String(data).replace(/[^0-9]/g, '');
-            if (digitsOnly.length === 13) {
-              scannedType = 'ean13';
-            } else if (digitsOnly.length === 8) {
-              scannedType = 'ean8';
-            } else if (digitsOnly.length === 12) {
-              scannedType = 'upc_a';
-            }
-          }
-          
-          // Debug: Log normalized scannedType
-          console.log('[ImageScanScreen Web] Normalized scannedType:', scannedType);
-          
-          const res = classifyInput(data, scannedType);
-          
-          // Debug: Log classification result
-          console.log('[ImageScanScreen Web] Classification result type:', res.type, 'isUrl:', res.isUrl);
-          let updated = res;
-          try {
-            if (res.isUrl) {
-              setLoading(true);
-              const remote = await checkRisk(res.normalized);
-              if (remote?.error) { setOffline(true); } else { setOffline(false); }
-              if (remote?.isRisky) {
-                const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
-                const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
-                const files = remote?.foundInFiles || [];
-                const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
-                if (files.includes('usom')) {
-                  reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
-                } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
-                  reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
-                }
-                updated = { ...res, level: 'unsafe', reasons };
-              }
-              setLoading(false);
-            }
-          } catch {
-            setOffline(true);
-            setLoading(false);
-          }
-          setResult(updated);
-          const eligible = ['ean13', 'ean8', 'upc_a'];
-          const country = eligible.includes(scannedType) ? detectGs1Country(data, t) : null;
-          setGs1Country(country);
-          setError(null);
-        } else {
-          setResult(null);
-          setError(t('scan.noCodeFound') || 'Bu görselde kod bulunamadı');
-        }
+        setResult(null);
+        setError(t('scan.notSupportedWeb') || 'Web sürümünde tarama desteklenmiyor.');
       } else {
         let localUri = uri;
         try {
@@ -221,7 +177,24 @@ export default function ImageScanScreen() {
             localUri = tmp;
           }
         } catch {}
-        const variants = await prepareVariantsForScan(localUri);
+
+        // Optimization: Try scanning the original image first without any heavy processing
+        let variants = [];
+        let quickFound = false;
+        try {
+           const quickAttempt = await BarcodeScanning.scan(localUri);
+           if (quickAttempt && quickAttempt.length > 0) {
+             variants = [localUri];
+             quickFound = true;
+           }
+        } catch (e) {
+           console.log('[ImageScanScreen Native] Quick scan failed, proceeding to deep scan', e);
+        }
+
+        if (!quickFound) {
+           variants = await prepareVariantsForScan(localUri);
+        }
+
         let first = null;
         for (const candidate of variants) {
           try {
@@ -441,33 +414,7 @@ export default function ImageScanScreen() {
     }
   }, [route.params]);
 
-  // Ekran görünür hale geldiğinde sıfırla
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      hasHandledSharedImage.current = false;
-      lastHandledSharedImageUri.current = null;
-      setImage(null);
-      setResult(null);
-      setError(null);
-      setPickerDismissed(false);
-      setAutoPickTriggered(false);
-    });
-    return () => unsubscribe?.();
-  }, [navigation]);
-
-  // Reset to default state when leaving the screen so coming back is clean
-  useEffect(() => {
-    const unsubscribe = navigation?.addListener?.('blur', () => {
-      hasHandledSharedImage.current = false;
-      lastHandledSharedImageUri.current = null;
-      setImage(null);
-      setResult(null);
-      setError(null);
-      setPickerDismissed(false);
-      setAutoPickTriggered(false);
-    });
-    return () => unsubscribe?.();
-  }, [navigation]);
+ 
 
   const resetScan = async () => {
     setImage(null);
@@ -612,19 +559,40 @@ export default function ImageScanScreen() {
       {result && (
         <>
           <View style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea', alignItems: 'center' }]}> 
-            <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
-              {result.isUrl ? (t('label.url') || 'URL') : (
-                result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
-                result.type === 'tel' ? (t('label.phone') || 'Telefon') :
-                result.type === 'email' ? (t('label.email') || 'E‑posta') :
-                result.type === 'sms' ? (t('label.sms') || 'SMS') :
-                result.type === 'geo' ? (t('label.location') || 'Konum') :
-                result.type === 'vcard' ? (t('label.contact') || 'Kişi') :
-                result.type === 'event' ? (t('label.event') || 'Etkinlik') :
-                (t('label.content') || 'İçerik')
-              )}
-            </Text>
-            <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0b1220', textAlign: 'center' }]} selectable>{result.normalized}</Text>
+            <View style={{
+              backgroundColor: dark ? 'rgba(56, 139, 253, 0.1)' : '#f0f9ff',
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+              borderRadius: 20,
+              marginBottom: 4,
+              borderWidth: 1,
+              borderColor: dark ? 'rgba(56, 139, 253, 0.3)' : '#bae6ff',
+            }}>
+              <Text style={[styles.sectionLabel, { color: dark ? '#58a6ff' : '#0969da', marginBottom: 0, fontSize: 14, fontWeight: '700' }]}>
+                {result.isUrl ? (t('label.url') || 'URL') : (
+                  result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
+                  result.type === 'tel' ? (t('label.phone') || 'Telefon') :
+                  result.type === 'email' ? (t('label.email') || 'E‑posta') :
+                  result.type === 'sms' ? (t('label.sms') || 'SMS') :
+                  result.type === 'geo' ? (t('label.location') || 'Konum') :
+                  result.type === 'vcard' ? (t('label.contact') || 'Kişi') :
+                  result.type === 'event' ? (t('label.event') || 'Etkinlik') :
+                  (t('label.content') || 'İçerik')
+                )}
+              </Text>
+            </View>
+            <View style={{
+              borderWidth: 1,
+              borderColor: dark ? '#30363d' : '#d0d7de',
+              borderRadius: 8,
+              padding: 12,
+              backgroundColor: dark ? '#161b22' : '#f6f8fa',
+              width: '100%',
+              marginTop: 8,
+              marginBottom: 8
+            }}>
+              <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0b1220', textAlign: 'center' }]} selectable>{result.normalized}</Text>
+            </View>
             {/* Show Barcode UI if isBarcode is true OR if gs1Country is present */ }
             {(isBarcode || gs1Country) && result.type !== 'wifi' ? (
               <View style={{alignItems: 'center', gap: 4, marginTop: 8}}>
@@ -707,7 +675,7 @@ export default function ImageScanScreen() {
                       })()}</Text>}
                       {d.url && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomUrlLabel')}</Text> {d.url}</Text>}
                        {(d.ipAddress || d.ip) && <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}><Text style={{fontWeight:'700'}}>{t('remoteRisk.usomIpLabel')}</Text> {d.ipAddress || d.ip}</Text>}
-                        <TouchableOpacity onPress={() => Linking.openURL('https://www.usom.gov.tr/adres')} style={{marginTop: 8}}>
+                      <TouchableOpacity onPress={() => openExternalUrl('https://www.usom.gov.tr/adres')} style={{marginTop: 8}}>
                           <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline', fontWeight: '500'}}>{t('remoteRisk.usomReference')}</Text>
                         </TouchableOpacity>
                       </View>
@@ -720,7 +688,7 @@ export default function ImageScanScreen() {
                        <Text style={[styles.usomText, { color: dark ? '#e6edf3' : '#24292f' }]}>
                          {t('remoteRisk.githubFoundText', { repo: r.repo })}
                        </Text>
-                       <TouchableOpacity onPress={() => Linking.openURL(r.url)} style={{marginTop: 4}}>
+                       <TouchableOpacity onPress={() => openExternalUrl(r.url)} style={{marginTop: 4}}>
                           <Text style={{color: dark ? '#58a6ff' : '#0969da', textDecorationLine: 'underline'}}>{t('remoteRisk.viewSource')}</Text>
                        </TouchableOpacity>
                      </View>
@@ -761,7 +729,14 @@ export default function ImageScanScreen() {
                   key: 'open',
                   label: t('actions.openLink') || 'Linki Aç',
                   icon: 'open-outline',
-                  onPress: async () => { const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized; const triggered = await registerLinkOpen(); if (!triggered) { setPendingUrl(raw); setConfirmVisible(true); } },
+                  onPress: async () => { 
+                    const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized; 
+                    setPendingUrl(raw);
+                    const triggered = await registerLinkOpen(); 
+                    if (!triggered) { 
+                      setConfirmVisible(true); 
+                    } 
+                  },
                   color: '#2da44e',
                 },
                 result.type !== 'wifi' && {
@@ -861,20 +836,36 @@ export default function ImageScanScreen() {
       
       <FeedbackModal
         visible={feedbackVisible}
-        onClose={closeFeedback}
+        onClose={() => { 
+          closeFeedback(); 
+          if (pendingUrl) { 
+            setTimeout(() => { setConfirmVisible(true); }, 300); 
+          } 
+        }}
         onFeedbackGiven={markFeedbackGiven}
       />
       
       <ConfirmOpenLinkModal
         visible={confirmVisible}
         url={pendingUrl}
-        onConfirm={async () => { setConfirmVisible(false); if (pendingUrl) { try { await Linking.openURL(pendingUrl); } catch {} } setPendingUrl(null); }}
+        onConfirm={async () => { setConfirmVisible(false); if (pendingUrl) { try { await openExternalUrl(pendingUrl); } catch {} } setPendingUrl(null); }}
         onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
       />
     </ScrollView>
 
     <Toast visible={toastVisible} message={toastMsg} onHide={() => setToastVisible(false)} dark={dark} style={{ position: 'absolute', bottom: 80, left: 20, right: 20 }} />
     {renderLoadingStates()}
+    {inversionTask && (
+      <ImageInverter 
+          uri={inversionTask.uri}
+          width={inversionTask.width}
+          height={inversionTask.height}
+          onProcessed={(result) => {
+              if (inversionTask.resolve) inversionTask.resolve(result);
+              setInversionTask(null);
+          }}
+      />
+    )}
     </View>
   );
 }

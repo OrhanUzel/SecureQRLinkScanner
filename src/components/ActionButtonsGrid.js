@@ -19,18 +19,18 @@ export default function ActionButtonsGrid({ buttons = [], columns = 2, compact =
     arranged.sort((a, b) => (a.key === 'google' ? -1 : b.key === 'google' ? 1 : 0));
   }
 
-  const baseWidth = columns <= 1 ? '100%' : columns === 3 ? '31%' : '48%';
-
   return (
     <View style={[styles.grid, style]}>
       {arranged.map(btn => {
-        const width = btn.fullWidth ? '100%' : baseWidth;
+        const isFull = btn.fullWidth || columns <= 1;
+        
         return (
           <TouchableOpacity
             key={btn.key || btn.label}
             style={[
               styles.tile,
-              { backgroundColor: btn.color || '#0969da', width },
+              { backgroundColor: btn.color || '#0969da' },
+              isFull ? { width: '100%' } : { flexBasis: columns === 3 ? '30%' : '40%', flexGrow: 1 },
               compact ? { paddingVertical: 12 } : null,
               btn.style
             ]}
@@ -64,6 +64,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    minHeight: 64, // Added minHeight for consistency
   },
   tileLabel: {
     color: '#fff',

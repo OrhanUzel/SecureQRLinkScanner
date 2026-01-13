@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 
 function normalizeInput(value) {
@@ -24,6 +24,12 @@ export async function openExternalUrl(targetUrl) {
   const url = normalizeInput(targetUrl);
   if (!url) return;
   try {
+    const isHttp = url.startsWith('http://') || url.startsWith('https://');
+    if (isHttp && Platform.OS !== 'web') {
+      const encoded = encodeURIComponent(url);
+      await Linking.openURL(`secureqrlinkscanner://webview/${encoded}`);
+      return;
+    }
     await Linking.openURL(url);
   } catch (e) {
     Alert.alert('Hata', e?.message || 'Bağlantı açılamadı.');

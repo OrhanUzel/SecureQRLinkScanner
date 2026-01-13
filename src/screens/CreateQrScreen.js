@@ -10,13 +10,14 @@ import * as ImagePicker from 'expo-image-picker';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import Toast from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
-import { QRCodeWriter, BarcodeFormat, EncodeHintType } from '@zxing/library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { useAdManager } from '../hooks/useAdManager';
 import ColorPicker, { Panel1, Swatches, Preview, HueSlider } from 'reanimated-color-picker';
 import { runOnJS } from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import QRCode from 'react-native-qrcode-svg';
 
 const FRAME_SWATCHES = ['#0f172a', '#2563eb', '#1d4ed8', '#0f766e', '#22c55e', '#f97316', '#dc2626', '#9333ea', '#111827', '#ffffff'];
 
@@ -43,6 +44,7 @@ export default function CreateQrScreen() {
   const [uiState, setUiState] = useState({
     input: '',
     matrix: null,
+    generatedContent: null,
     error: null,
     generating: false,
     inputHeight: 44,
@@ -319,37 +321,20 @@ export default function CreateQrScreen() {
   const generateMatrix = useCallback(async (text) => {
     try {
       if (!text || !text.trim()) {
-        updateUi({ matrix: null, error: null });
+        updateUi({ matrix: null, generatedContent: null, error: null });
         return;
       }
       updateUi({ generating: true, error: null });
-      await new Promise(r => setTimeout(r, 0));
+      await new Promise(r => setTimeout(r, 100));
 
-      const writer = new QRCodeWriter();
-      const hints = new Map();
-      const quietZone = showFrameControls ? 6 : 4;
-      hints.set(EncodeHintType.MARGIN, quietZone);
-      hints.set(EncodeHintType.ERROR_CORRECTION, 'H');
-      
-      const targetSize = showFrameControls ? 58 : 54;
-      const bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, targetSize, targetSize, hints);
-      const width = bitMatrix.getWidth();
-      const height = bitMatrix.getHeight();
-      const rows = [];
-      for (let y = 0; y < height; y++) {
-        const row = [];
-        for (let x = 0; x < width; x++) {
-          row.push(bitMatrix.get(x, y));
-        }
-        rows.push(row);
-      }
-      updateUi({ matrix: { rows, size: width }, error: null });
+      // Set matrix to a dummy object to satisfy legacy checks (if any) and enable display
+      updateUi({ matrix: { size: 100, rows: [] }, generatedContent: text, error: null });
     } catch (e) {
-      updateUi({ matrix: null, error: t('qr_generation_error') || 'QR kod oluşturulamadı.' });
+      updateUi({ matrix: null, generatedContent: null, error: t('qr_generation_error') || 'QR kod oluşturulamadı.' });
     } finally {
       updateUi({ generating: false });
     }
-  }, [t, showFrameControls]);
+  }, [t]);
 
   const buildPayload = useCallback(() => {
     const type = qrSettings.type;
@@ -424,21 +409,8 @@ export default function CreateQrScreen() {
   };
 
   const buildCanvasDataUrl = () => {
-    if (!uiState.matrix || !isWeb) return null;
-    const size = uiState.matrix.size * cellSize;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = qrSettings.qrColor;
-    for (let y = 0; y < uiState.matrix.size; y++) {
-      for (let x = 0; x < uiState.matrix.size; x++) {
-        if (uiState.matrix.rows[y][x]) ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-      }
-    }
-    return canvas.toDataURL('image/png');
+    // Web canvas generation is temporarily disabled due to SVG migration.
+    return null;
   };
 
   const onDownload = async () => {
@@ -447,7 +419,10 @@ export default function CreateQrScreen() {
       const filename = getFilename();
       if (isWeb) {
         const url = buildCanvasDataUrl();
-        if (!url) return;
+        if (!url) {
+           updateUi({ toast: { visible: true, message: t('web_download_unavailable') || 'Web üzerinden indirme şu an desteklenmiyor.', type: 'error' } });
+           return;
+        }
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
@@ -476,7 +451,10 @@ export default function CreateQrScreen() {
       const filename = getFilename();
       if (isWeb) {
         const url = buildCanvasDataUrl();
-        if (!url) return;
+        if (!url) {
+           updateUi({ toast: { visible: true, message: t('web_share_unavailable') || 'Web üzerinden paylaşım şu an desteklenmiyor.', type: 'error' } });
+           return;
+        }
         const res = await fetch(url);
         const blob = await res.blob();
         const file = new File([blob], filename, { type: 'image/png' });
@@ -794,21 +772,27 @@ export default function CreateQrScreen() {
         {uiState.matrix && !uiState.generating && (
           <View style={[styles.qrSection, compact ? { gap: 12, marginVertical: 12 } : null]}>
             <ViewShot ref={qrRef} options={{ format: 'png', quality: 1 }}>
-              <View style={[styles.qrContainer, { backgroundColor: showFrameControls ? qrSettings.frameThemeColor : (dark ? '#1b2330' : '#fff') }]}>
+              <View style={[styles.qrContainer, { backgroundColor: showFrameControls ? qrSettings.frameThemeColor : '#ffffff' }]}>
                 <View style={[styles.qrPreview, showFrameControls ? styles.qrPreviewFramed : null]}>
                   <View style={[styles.qrWrap, { width: qrSize, height: qrSize }, showFrameControls ? styles.qrWrapElevated : null]}>
-                    {uiState.matrix.rows.map((row, y) => (
-                      <View key={y} style={{ flexDirection: 'row' }}>
-                        {row.map((on, x) => (
-                          <View key={x} style={{ width: cellSize, height: cellSize, backgroundColor: on ? qrSettings.qrColor : '#fff' }} />
-                        ))}
-                      </View>
-                    ))}
-                    {showLogoControls && qrSettings.customLogo ? (
-                      <View style={[styles.logoOverlay, { width: logoOverlaySize, height: logoOverlaySize, marginLeft: -(logoOverlaySize / 2), marginTop: -(logoOverlaySize / 2), borderRadius: logoOverlaySize / 4, overflow: 'hidden' }]}>
+                    <QRCode
+                      value={uiState.generatedContent || ' '}
+                      size={qrSize}
+                      color={qrSettings.qrColor}
+                      backgroundColor="white"
+                      ecl="H"
+                    />
+                    {showLogoControls && qrSettings.customLogo && (
+                      <View style={[styles.logoOverlay, { 
+                        width: logoOverlaySize, 
+                        height: logoOverlaySize, 
+                        marginLeft: -logoOverlaySize / 2, 
+                        marginTop: -logoOverlaySize / 2,
+                        borderRadius: logoOverlaySize * 0.23
+                      }]}>
                         <Image source={{ uri: qrSettings.customLogo }} style={styles.logoOverlayImage} />
                       </View>
-                    ) : null}
+                    )}
                   </View>
                   {showFrameControls && (
                     <View style={[styles.frameLabelBlock, { backgroundColor: qrSettings.frameThemeColor, borderColor: qrSettings.frameThemeColor.toLowerCase() === '#ffffff' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.9)' }]}>
@@ -851,13 +835,13 @@ export default function CreateQrScreen() {
 
       {/* Color Picker Modal */}
       <Modal visible={uiState.colorPickerVisible} transparent animationType="fade" onRequestClose={() => updateUi({ colorPickerVisible: false })}>
-        <View style={styles.colorModalOverlay}>
+        <GestureHandlerRootView style={styles.colorModalOverlay}>
           <View style={[styles.colorModalCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
             <Text style={[styles.colorModalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
               {uiState.colorPickerTarget === 'qr' ? (t('custom_qr_dot_color') || 'Nokta Rengi') : (t('custom_qr_color_pick') || 'Tema rengi seç')}
             </Text>
             
-            <View style={{ height: 260, width: '100%', marginVertical: 8 }}>
+            <View style={{ height: 260, width: '100%', marginVertical: 10 }}>
               <ColorPicker 
                 style={{ flex: 1 }} 
                 value={uiState.colorPickerTarget === 'qr' ? qrSettings.tempQrColor : qrSettings.tempFrameColor} 
@@ -871,7 +855,7 @@ export default function CreateQrScreen() {
                   textStyle={{ color: dark ? '#fff' : '#000', fontSize: 16, fontWeight: 'bold' }} 
                 />
                 <Panel1 style={{ marginTop: 12, borderRadius: 12 }} />
-                <HueSlider style={{ marginTop: 12, borderRadius: 12, height: 24 }} />
+                <HueSlider style={{ marginTop: 12, borderRadius: 12, height: 30 }} />
               </ColorPicker>
             </View>
 
@@ -891,7 +875,7 @@ export default function CreateQrScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
 
       {/* Unlock Success Modal */}
@@ -955,22 +939,19 @@ export default function CreateQrScreen() {
             </View>
             <Text style={[styles.rewardSubtitle, { color: dark ? '#94a3b8' : '#475569' }]}>{gateDesc}</Text>
             
+            {Platform.OS !== 'ios' && (
             <TouchableOpacity
               style={[styles.premiumBtn, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderColor: 'rgba(236,72,153,0.7)', backgroundColor: 'rgba(236,72,153,0.26)', paddingHorizontal: 16, paddingVertical: 12, marginBottom: 2 }]}
               onPress={() => {
-                if (Platform.OS === 'ios') {
-                  closeCustomGate();
-                  setTimeout(() => { updateUi({ adInfoModal: { visible: true, title: t('premium.inactive.title'), message: t('premium.inactive.message') } }); }, 300);
-                } else {
-                  closeCustomGate();
-                  navigation.navigate('Paywall');
-                }
+                closeCustomGate();
+                navigation.navigate('Paywall');
               }}
               activeOpacity={0.9}
             >
               <Ionicons name="diamond" size={18} color={dark ? '#fce7f3' : '#be185d'} style={{ marginRight: 8 }} />
               <Text style={[styles.premiumText, { color: dark ? '#fce7f3' : '#9d174d', fontWeight: '800' }]}>{t('custom_qr_go_premium') || 'Premium planlarını gör'}</Text>
             </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.rewardCta, { backgroundColor: dark ? '#166534' : '#16a34a', borderColor: dark ? '#22c55e' : '#16a34a', borderWidth: 1 }]}

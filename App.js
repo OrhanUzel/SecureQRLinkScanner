@@ -22,10 +22,10 @@ import ImageScanScreen from './src/screens/ImageScanScreen';
 import CreateQrScreen from './src/screens/CreateQrScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import PremiumScreen from './src/screens/PremiumScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
 import DisclaimerScreen from './src/screens/DisclaimerScreen';
 import OnboardingScreen, { checkOnboarding } from './src/screens/OnboardingScreen';
+import WebViewScreen from './src/screens/WebViewScreen';
 
 // Bileşenler ve Utils
 import ConsentModal, { hasConsent, setConsent } from './src/components/ConsentModal';
@@ -112,6 +112,7 @@ function RootNavigator() {
     config: { 
       screens: { 
         Disclaimer: 'disclaimer',
+        WebView: { path: 'webview/:url?', parse: { url: (url) => url ? decodeURIComponent(url) : undefined } },
         LinkScan: { path: 'linkscan/:url?', parse: { url: (url) => url ? decodeURIComponent(url) : undefined } },
         CodeScan: 'scan',
         ImageScan: { path: 'imagescan/:imageUri?', parse: { imageUri: (value) => value ? decodeURIComponent(value) : undefined } }
@@ -194,10 +195,10 @@ function RootNavigator() {
           <Stack.Screen name="LinkScan" component={LinkScanScreen} options={{ title: t('scan.link') }} />
           <Stack.Screen name="CodeScan" component={CodeScanScreen} options={{ title: t('scan.code') }} />
           <Stack.Screen name="ImageScan" component={ImageScanScreen} options={{ title: t('scan.image') }} />
+          <Stack.Screen name="WebView" component={WebViewScreen} options={{ title: t('scan.link') }} />
           <Stack.Screen name="CreateQR" component={CreateQrScreen} options={{ title: t('scan.create') }} />
           <Stack.Screen name="History" component={HistoryScreen} options={{ title: t('history.title') }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
-          <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('settings.premiumTitle') }} />
           <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
           <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: t('disclaimer.title'), presentation: 'modal' }} />
         </Stack.Navigator>

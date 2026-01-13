@@ -9,7 +9,7 @@ module.exports = {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
     owner: "orhanuzl",
-    version: "1.4.0",
+    version: "1.5.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -73,7 +73,7 @@ module.exports = {
       }
     },
     android: {
-      versionCode: 12,
+      versionCode: 15,
       adaptiveIcon: {
         foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"
@@ -107,7 +107,6 @@ module.exports = {
     },
     plugins: [
       "expo-mail-composer",
-      "./plugins/withUnityAds/app.plugin.js",
       "./plugins/withShareIntent/app.plugin.js",
 
       [

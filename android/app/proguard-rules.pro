@@ -1,87 +1,195 @@
-# ==========================================================================
-#  SECURE QR & LINK SCANNER - OPTİMİZE EDİLMİŞ PROGUARD KURALLARI
-# ==========================================================================
+# React Native ProGuard Configuration
+# Bu dosyayı android/app/proguard-rules.pro olarak kaydedin
 
-# --------------------------------------------------------------------------
-# 1. REACT NATIVE, HERMES & EXPO ÇEKİRDEK
-# --------------------------------------------------------------------------
+# ===== TEMEL REACT NATIVE KURALLARI =====
 -keep class com.facebook.react.** { *; }
 -keep class com.facebook.jni.** { *; }
+-keep class com.facebook.hermes.** { *; }
 -keep class com.facebook.soloader.** { *; }
+
+# React Native Bridge
+-keepclassmembers class * {
+    @com.facebook.react.uimanager.annotations.ReactProp <methods>;
+    @com.facebook.react.uimanager.annotations.ReactPropGroup <methods>;
+}
+
+-keepclassmembers class * {
+    @com.facebook.react.bridge.ReactMethod <methods>;
+}
+
+#-keep @com.facebook.react.bridge.ReactModule class * { *; }
+-keep class * extends com.facebook.react.bridge.JavaScriptModule { *; }
+-keep class * extends com.facebook.react.bridge.NativeModule { *; }
+
+# Hermes Engine
 -keep class com.facebook.hermes.unicode.** { *; }
--keep class com.facebook.react.turbomodule.** { *; }
+-keep class com.facebook.jni.** { *; }
+
+# ===== EXPO KURALLARI =====
 -keep class expo.modules.** { *; }
--keep class expo.modules.kotlin.** { *; }
+-keep class versioned.host.exp.exponent.** { *; }
 
-# Reanimated (Navigasyon ve animasyonlar için kritik)
--keep class com.swmansion.reanimated.** { *; }
+# Expo Camera
+-keep class expo.modules.camera.** { *; }
 
-# --------------------------------------------------------------------------
-# 2. REACT NAVIGATION & UI
-# --------------------------------------------------------------------------
--keep class com.swmansion.rnscreens.** { *; }
--keep class androidx.appcompat.** { *; }
--keep class androidx.fragment.app.** { *; }
--keepattributes *Annotation*
+# Expo Image Picker
+-keep class expo.modules.imagepicker.** { *; }
 
-# Vector Icons (İkonların "X" görünmesini engeller)
--keep class com.oblador.vectoricons.** { *; }
+# Expo File System
+-keep class expo.modules.filesystem.** { *; }
 
-# --------------------------------------------------------------------------
-# 3. GOOGLE ADS & ADMOB (GELİR İÇİN KRİTİK)
-# --------------------------------------------------------------------------
--keep class com.google.android.gms.ads.** { *; }
--keep class com.google.ads.** { *; }
--keep public class com.google.android.gms.ads.** { public *; }
--keep class com.google.android.gms.ads.nativead.** { *; }
+# Expo Media Library
+-keep class expo.modules.medialibrary.** { *; }
 
-# --------------------------------------------------------------------------
-# 4. IN-APP PURCHASES (IAP - SATIN ALMALAR)
-# Hem Google Billing hem de RNIap kütüphanesi korunmalı.
-# --------------------------------------------------------------------------
--keep class com.android.vending.billing.** { *; }
--keep class com.android.billingclient.api.** { *; }
--keep class com.dooboolab.RNIap.** { *; }
+# Expo Secure Store
+-keep class expo.modules.securestore.** { *; }
 
-# --------------------------------------------------------------------------
-# 5. ML KIT, CAMERA & MEDIA
-# --------------------------------------------------------------------------
+# Expo Linking
+-keep class expo.modules.linking.** { *; }
+
+# ===== REACT NATIVE ML KIT (BARCODE SCANNING) =====
 -keep class com.google.mlkit.** { *; }
 -keep class com.google.android.gms.vision.** { *; }
--keep class com.google.android.gms.tasks.** { *; }
--keep class androidx.camera.** { *; }
--dontwarn androidx.camera.**
+-keep class com.google.mlkit.vision.barcode.** { *; }
 
-# React Native View Shot (Ekran Görüntüsü)
--keep class fr.greweb.reactnativeviewshot.** { *; }
+-dontwarn com.google.mlkit.**
+-dontwarn com.google.android.gms.**
 
-# --------------------------------------------------------------------------
-# 6. NITRO MODULES (Hızlı modüller için kritik)
-# --------------------------------------------------------------------------
--keep class com.margelo.nitro.** { *; }
--keep class * extends com.margelo.nitro.** { *; }
--keep interface com.margelo.nitro.** { *; }
+# ===== REACT NAVIGATION =====
+-keep class * extends androidx.fragment.app.Fragment {}
+-keep class * extends com.facebook.react.ReactActivity { *; }
 
-# --------------------------------------------------------------------------
-# 7. WEBVIEW & ASYNC STORAGE
-# --------------------------------------------------------------------------
--keep class android.webkit.** { *; }
--keep class com.reactnativecommunity.webview.** { *; }
+# ===== ASYNC STORAGE =====
 -keep class com.reactnativecommunity.asyncstorage.** { *; }
 
-# --------------------------------------------------------------------------
-# 8. NETWORK & GENEL JAVA GÜVENLİĞİ (OkHttp/Retrofit)
-# --------------------------------------------------------------------------
--keepattributes InnerClasses,EnclosingMethod,Signature,Exceptions,SourceFile,LineNumberTable
+# ===== NETINFO =====
+-keep class com.reactnativecommunity.netinfo.** { *; }
 
-# OkHttp & Retrofit
+# ===== REACT NATIVE GESTURE HANDLER =====
+-keep class com.swmansion.gesturehandler.** { *; }
+-keep class com.swmansion.gesturehandler.react.** { *; }
+
+# ===== REACT NATIVE REANIMATED =====
+-keep class com.swmansion.reanimated.** { *; }
+-keep class com.facebook.react.turbomodule.** { *; }
+
+# ===== REACT NATIVE SCREENS =====
+-keep class com.swmansion.rnscreens.** { *; }
+
+# ===== REACT NATIVE SVG =====
+-keep class com.horcrux.svg.** { *; }
+
+# ===== REACT NATIVE VIEW SHOT =====
+-keep class fr.greweb.reactnativeviewshot.** { *; }
+
+# ===== GOOGLE MOBILE ADS =====
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+
+# ===== REVENUECAT (PURCHASES) =====
+-keep class com.revenuecat.purchases.** { *; }
+-keep class com.android.billingclient.api.** { *; }
+-dontwarn com.revenuecat.purchases.**
+
+# ===== REACT NATIVE SAFE AREA CONTEXT =====
+-keep class com.th3rdwave.safeareacontext.** { *; }
+
+# ===== REACT NATIVE IN-APP REVIEW =====
+-keep class com.google.android.play.core.** { *; }
+-dontwarn com.google.android.play.core.**
+
+# ===== JAVAX ANNOTATIONS =====
+-dontwarn javax.annotation.**
+-keep class javax.annotation.** { *; }
+
+# ===== OKHTTP & NETWORKING =====
+-keepattributes Signature
+-keepattributes *Annotation*
 -keep class okhttp3.** { *; }
 -keep interface okhttp3.** { *; }
 -dontwarn okhttp3.**
 -dontwarn okio.**
--dontwarn javax.annotation.**
--dontwarn org.apache.http.**
--keep class retrofit2.** { *; }
--dontwarn retrofit2.**
--keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
+
+# ===== FRESCO (IMAGE LOADING) =====
+-keep @com.facebook.common.internal.DoNotStrip class * { *; }
+-keep @com.facebook.soloader.DoNotOptimize class * { *; }
+-keep class com.facebook.imagepipeline.** { *; }
+-keep class com.facebook.drawee.** { *; }
+
+# ===== GSON / JSON =====
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn sun.misc.**
+-keep class com.google.gson.** { *; }
+#-keep class * implements com.google.gson.TypeAdapter
+#-keep class * implements com.google.gson.TypeAdapterFactory
+#-keep class * implements com.google.gson.JsonSerializer
+#-keep class * implements com.google.gson.JsonDeserializer
+
+# ===== KOTLIN =====
+-keep class kotlin.** { *; }
+-keep class kotlin.Metadata { *; }
+-dontwarn kotlin.**
+-keepclassmembers class **$WhenMappings {
+    <fields>;
+}
+
+# ===== GENEL ANDROID KURALLARI =====
+-keepattributes SourceFile,LineNumberTable
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes Exceptions
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+
+# Crashlytics için stack trace bilgilerini koru
+-keepattributes SourceFile,LineNumberTable
+
+# Enum sınıfları
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# Parcelable
+-keep class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator *;
+}
+
+# Serializable
+-keepnames class * implements java.io.Serializable
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    !static !transient <fields>;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+# ===== OPTİMİZASYON AYARLARI =====
+-optimizationpasses 5
+-dontusemixedcaseclassnames
+-verbose
+
+# ===== UYARILAR =====
+-dontwarn com.facebook.react.**
+-dontwarn java.nio.file.*
 -dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
+
+# ===== EKLENMESİ GEREKEN KRİTİK KURALLAR =====
+
+# Google Play Services & Tasks (ML Kit ve AdMob için kritik)
+-keep class com.google.android.gms.tasks.** { *; }
+-dontwarn com.google.android.gms.tasks.**
+
+# Kotlin Coroutines (Modern Expo modülleri ve React Native 0.74+ sonrası için şart)
+-keep class kotlinx.coroutines.** { *; }
+-keepclassmembers class kotlinx.coroutines.** { *; }
+-dontwarn kotlinx.coroutines.**
+
+
+# React Native Reanimated (Layout Animations için ek güvenlik)
+-keep class com.swmansion.reanimated.layoutReanimation.** { *; }

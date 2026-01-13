@@ -13,6 +13,7 @@ import { BlurView } from 'expo-blur';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { openExternalUrl } from '../utils/linkActions';
 
 
 export default function HistoryScreen() {
@@ -147,7 +148,10 @@ export default function HistoryScreen() {
           const len = cleanContent.length;
           const isBarcode = !isWifi && ((item.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128'].includes(item.type.toLowerCase())) ||
                             (isNumeric && (len === 8 || len === 12 || len === 13)));
-          
+          const isSms = !isWifi && (contentType === 'sms' || upperContent.startsWith('SMSTO:'));
+          const isEmail = !isWifi && (contentType === 'email' || cleanContent.startsWith('mailto:') || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanContent));
+          const isTel = !isWifi && (contentType === 'tel'  );
+       
           let country = item.country;
           if (!country && isBarcode) {
             country = detectGs1Country(cleanContent, t);
@@ -176,6 +180,21 @@ export default function HistoryScreen() {
                   <View style={[styles.levelBadge, { backgroundColor: '#0f766e' }]}>
                     <Ionicons name="wifi-outline" size={16} color="#fff" />
                     <Text style={styles.levelText}>{t('label.wifi') || 'Wi‑Fi'}</Text>
+                  </View>
+                ) : isSms ? (
+                  <View style={[styles.levelBadge, { backgroundColor: '#06b6d4' }]}>
+                    <Ionicons name="chatbubble-outline" size={16} color="#fff" />
+                    <Text style={styles.levelText}>{t('label.sms') || 'SMS'}</Text>
+                  </View>
+                ) : isEmail ? (
+                  <View style={[styles.levelBadge, { backgroundColor: '#2563eb' }]}>
+                    <Ionicons name="mail-outline" size={16} color="#fff" />
+                    <Text style={styles.levelText}>{t('label.email') || 'E‑posta'}</Text>
+                  </View>
+                ) : isTel ? (
+                  <View style={[styles.levelBadge, { backgroundColor: '#22c55e' }]}>
+                    <Ionicons name="call-outline" size={16} color="#fff" />
+                    <Text style={styles.levelText}>{t('label.phone') || 'Telefon'}</Text>
                   </View>
                 ) : isBarcode ? (
                   <View style={[styles.levelBadge, { backgroundColor: '#b80ddfff' }]}>
@@ -305,10 +324,13 @@ export default function HistoryScreen() {
                 <View style={styles.buttonRow}>
                   <TouchableOpacity 
                     style={[styles.actionButton, styles.googleButton]}
-                    onPress={() => {
+                    onPress={async () => {
                       const url = `https://www.google.com/search?q=${encodeURIComponent(item.content)}`;
-                      setPendingUrl(url);
-                      setConfirmVisible(true);
+                      try { 
+                        await openExternalUrl(url); 
+                      } catch (e) { 
+                        Alert.alert('Hata', 'Link açılamadı: ' + e.message); 
+                      }
                     }}
                     activeOpacity={0.8}
                   >
@@ -347,7 +369,7 @@ export default function HistoryScreen() {
           setConfirmVisible(false);
           if (pendingUrl) {
             try { 
-              await Linking.openURL(pendingUrl); 
+              await openExternalUrl(pendingUrl); 
             } catch (e) { 
               Alert.alert('Hata', 'Link açılamadı: ' + e.message); 
             }
