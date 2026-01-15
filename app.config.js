@@ -9,7 +9,7 @@ module.exports = {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
     owner: "orhanuzl",
-    version: "1.5.0",
+    version: "1.5.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -73,7 +73,7 @@ module.exports = {
       }
     },
     android: {
-      versionCode: 15,
+      versionCode: 16,
       adaptiveIcon: {
         foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"

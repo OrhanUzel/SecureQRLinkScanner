@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View, Text, StyleSheet } from 'react-native';
+import { Platform,Animated, View, Text, StyleSheet } from 'react-native';
 
 export default function Toast({ visible, message, type = 'success', onHide, dark, style }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -35,7 +35,12 @@ export default function Toast({ visible, message, type = 'success', onHide, dark
     : (dark ? '#ff6b6b' : '#842029');
 
   return (
-    <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }, style]}> 
+    <Animated.View 
+      style={[styles.container, { opacity, transform: [{ translateY }] }, style]}
+      pointerEvents={visible ? 'auto' : 'none'}
+      needsOffscreenAlphaCompositing={Platform.OS === 'android'}
+      renderToHardwareTextureAndroid={true}//gölgelenme sorunu için
+    > 
       <View style={[styles.toast, { backgroundColor: bg, borderColor: border }]}> 
         <Text style={[styles.text, { color }]}>{message}</Text>
       </View>
@@ -58,14 +63,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 4,
+    
   },
   text: {
     fontSize: 14,
     fontWeight: '600',
+    alignSelf: 'center',
   },
 });

@@ -48,6 +48,22 @@
   "result.secure": "Güvenli",
   "result.suspicious": "Şüpheli",
   "result.unsafe": "RİSKLİ",
+  "webview": {
+    "errorTitle": "Sayfa Yüklenemedi",
+    "errorMessage": "Sayfa yüklenirken bir sorun oluştu. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.",
+    "retry": "Tekrar Dene",
+    "httpError": "HTTP Hatası {{code}}",
+    "errors": {
+      "400": "Hatalı İstek",
+      "401": "Yetkisiz Erişim",
+      "403": "Erişim Engellendi",
+      "404": "Sayfa Bulunamadı",
+      "500": "Sunucu Hatası",
+      "502": "Geçersiz Ağ Geçidi",
+      "503": "Hizmet Kullanılamıyor",
+      "unknown": "Bilinmeyen Hata"
+    }
+  },
   "actions.openLink": "Linki Aç",
   "actions.analyzeVirusTotal": "VirusTotal ile Gelişmiş Analiz",
   "actions.scan": "Analiz Et",
@@ -157,6 +173,8 @@
   "loading.generatingCode": "Kodunuz oluşturuluyor...",
   "loading.generatingCodeDesc": "QR kod hazırlanıyor ve özelleştirmeler uygulanıyor",
   "alerts.offline": "İnternet bağlantısı bulunamadı. İnternet ile daha iyi analiz yapılır.",
+  "alerts.connectionErrorTitle": "Bağlantı Hatası",
+  "alerts.connectionErrorMessage": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.",
   "remoteRisk.defaultMessage": "Girilen bağlantı güvenlik riski barındıran domain listelerinde yer alıyor. Lütfen dikkatli ilerleyin.",
   "remoteRisk.checkedDomainLabel": "Kontrol edilen alan adı:",
   "remoteRisk.sourcesLabel": "Kaynaklar:",

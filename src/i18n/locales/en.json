@@ -48,6 +48,22 @@
   "result.secure": "Secure",
   "result.suspicious": "Suspicious",
   "result.unsafe": "UNSECURE",
+  "webview": {
+    "errorTitle": "Unable to Load Page",
+    "errorMessage": "There was a problem loading the page. Please check your internet connection and try again.",
+    "retry": "Retry",
+    "httpError": "HTTP Error {{code}}",
+    "errors": {
+      "400": "Bad Request",
+      "401": "Unauthorized Access",
+      "403": "Access Forbidden",
+      "404": "Page Not Found",
+      "500": "Internal Server Error",
+      "502": "Bad Gateway",
+      "503": "Service Unavailable",
+      "unknown": "Unknown Error"
+    }
+  },
   "actions.openLink": "Open Link",
   "actions.analyzeVirusTotal": "Advanced Analysis on VirusTotal",
   "actions.scan": "Analyze",
@@ -154,6 +170,8 @@
   "loading.generatingCode": "Generating your code...",
   "loading.generatingCodeDesc": "Building the QR and applying your customizations",
   "alerts.offline": "No internet connection. Online checks improve analysis.",
+  "alerts.connectionErrorTitle": "Connection Error",
+  "alerts.connectionErrorMessage": "Please check your internet connection and try again.",
   "remoteRisk.defaultMessage": "This link appears on external security risk lists. Proceed with caution.",
   "remoteRisk.checkedDomainLabel": "Checked domain:",
   "remoteRisk.sourcesLabel": "Sources:",

@@ -45,7 +45,6 @@ export const styles = StyleSheet.create({
   placeholderIcon: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   placeholderTitle: { fontSize: 18, fontWeight: '700' },
   placeholderText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  infoSection: { padding: 16, borderRadius: 12, marginTop: 2, gap: 8, borderWidth: 1 },
   infoTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
   infoText: { fontSize: 13, lineHeight: 18 },
   customSection: { borderWidth: 1, borderRadius: 18, padding: 16, marginTop: 12, gap: 18 },

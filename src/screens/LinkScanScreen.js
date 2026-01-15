@@ -11,6 +11,7 @@ import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
+import AdvancedAdCard from '../components/AdvancedAdCard';
 import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
 
@@ -395,6 +396,8 @@ export default function LinkScanScreen() {
         <Ionicons name="shield-checkmark" size={20} color="#fff" />
         <Text style={styles.buttonText}>{t('actions.scan')}</Text>
       </TouchableOpacity>
+
+      <AdvancedAdCard placement="linkscan_inline" />
 
       {result && (
         <View style={[styles.card, compact ? { padding: 12 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 

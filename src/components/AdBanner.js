@@ -179,6 +179,7 @@ const styles = StyleSheet.create({
     height: 250,
     overflow: 'hidden',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    borderRadius: 12
   }
 });

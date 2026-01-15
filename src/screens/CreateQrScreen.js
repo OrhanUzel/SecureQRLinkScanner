@@ -14,12 +14,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { useAdManager } from '../hooks/useAdManager';
-import ColorPicker, { Panel1, Swatches, Preview, HueSlider } from 'reanimated-color-picker';
+import ColorPicker, { Panel1, Preview, HueSlider } from 'reanimated-color-picker';
+import StatusModal from '../components/StatusModal';
 import { runOnJS } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import QRCode from 'react-native-qrcode-svg';
+import { useInterstitialAd } from '../hooks/useInterstitialAd';
 
-const FRAME_SWATCHES = ['#0f172a', '#2563eb', '#1d4ed8', '#0f766e', '#22c55e', '#f97316', '#dc2626', '#9333ea', '#111827', '#ffffff'];
 
 const CUSTOM_MODES = [
   { key: 'none', icon: 'qr-code-outline', labelKey: 'custom_qr_mode.none', defaultLabel: 'Klasik' },
@@ -59,7 +60,11 @@ export default function CreateQrScreen() {
     customGateLoading: false,
     logoBusy: false,
     missingInfoType: null,
+    statusModal: { visible: false, title: '', message: '', type: 'error' }
   });
+
+  // Call the hook to show interstitial ad on mount (if not premium)
+  useInterstitialAd(!uiState.premium);
 
   const [wifiConfig, setWifiConfig] = useState({
     ssid: '',
@@ -277,6 +282,23 @@ export default function CreateQrScreen() {
         updateUi({ adInfoModal: { visible: true, title, message } });
     }
   }, [uiState.customGateLoading, unlockState.pendingCustomMode, unlockState.pendingQrType, closeCustomGate, t, showAd]);
+
+  const handlePremiumNavigation = useCallback(async () => {
+    const state = await NetInfo.fetch();
+    if (!state.isConnected) {
+      updateUi({
+        statusModal: {
+          visible: true,
+          title: t('alerts.connectionErrorTitle'),
+          message: t('alerts.connectionErrorMessage'),
+          type: 'error'
+        }
+      });
+      return;
+    }
+    closeCustomGate();
+    navigation.navigate('Paywall');
+  }, [closeCustomGate, navigation, t]);
 
   const onColorChange = useCallback((hex) => {
     if (uiState.colorPickerTarget === 'qr') {
@@ -538,7 +560,7 @@ export default function CreateQrScreen() {
                       <Ionicons name={opt.icon} size={18} color={active ? '#fff' : (dark ? '#c3dafe' : '#2563eb')} />
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                      <Text style={[styles.typeChipText, { color: active ? '#fff' : (dark ? '#8b98a5' : '#0b1220') }]}>{opt.label}</Text>
+                      <Text style={[styles.typeChipText, { color: active ? '#fff' : (dark ? '#8b98a5' : '#0b1220'), flex: 1 }]}>{opt.label}</Text>
                       {['wifi', 'tel', 'email', 'sms'].includes(opt.k) && !uiState.premium && !unlockState.unlockedModes[opt.k] && (
                         <Ionicons name="lock-closed" size={14} color={active ? '#fff' : '#f97316'} />
                       )}
@@ -825,10 +847,8 @@ export default function CreateQrScreen() {
           </View>
         )}
 
-        <View style={[styles.infoSection, { backgroundColor: dark ? '#0d1523' : '#ffffff', borderColor: dark ? '#1f2937' : '#dbe2ea' }]}>
-          <Text style={[styles.infoTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}><Ionicons name="information-circle" size={16} /> {t('info_title') || 'Bilgi'}</Text>
-          <Text style={[styles.infoText, { color: dark ? '#8b98a5' : '#7a8699' }]}>{t('info_text') || 'QR kodları URL, metin, telefon numarası, e-posta adresi ve daha fazlasını içerebilir. Maksimum 2.953 karakter desteklenir.'}</Text>
-        </View>
+
+
       </ScrollView>
 
       <Toast visible={uiState.toast.visible} message={uiState.toast.message} type={uiState.toast.type} dark={dark} onHide={() => updateUi({ toast: { ...uiState.toast, visible: false } })} style={{ bottom: Math.max(insets.bottom + 32, 32) }} />
@@ -939,13 +959,10 @@ export default function CreateQrScreen() {
             </View>
             <Text style={[styles.rewardSubtitle, { color: dark ? '#94a3b8' : '#475569' }]}>{gateDesc}</Text>
             
-            {Platform.OS !== 'ios' && (
+            { (
             <TouchableOpacity
               style={[styles.premiumBtn, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderColor: 'rgba(236,72,153,0.7)', backgroundColor: 'rgba(236,72,153,0.26)', paddingHorizontal: 16, paddingVertical: 12, marginBottom: 2 }]}
-              onPress={() => {
-                closeCustomGate();
-                navigation.navigate('Paywall');
-              }}
+              onPress={handlePremiumNavigation}
               activeOpacity={0.9}
             >
               <Ionicons name="diamond" size={18} color={dark ? '#fce7f3' : '#be185d'} style={{ marginRight: 8 }} />
@@ -971,6 +988,14 @@ export default function CreateQrScreen() {
           </View>
         </View>
       </Modal>
+
+      <StatusModal
+        visible={uiState.statusModal.visible}
+        title={uiState.statusModal.title}
+        message={uiState.statusModal.message}
+        type={uiState.statusModal.type}
+        onClose={() => updateUi({ statusModal: { ...uiState.statusModal, visible: false } })}
+      />
     </View>
   );
 }

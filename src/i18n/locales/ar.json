@@ -48,6 +48,22 @@
   "result.secure": "آمن",
   "result.suspicious": "مشبوه",
   "result.unsafe": "غير آمن",
+  "webview": {
+    "errorTitle": "تعذر تحميل الصفحة",
+    "errorMessage": "حدثت مشكلة أثناء تحميل الصفحة. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+    "retry": "إعادة المحاولة",
+    "httpError": "خطأ HTTP {{code}}",
+    "errors": {
+      "400": "طلب غير صالح",
+      "401": "دخول غير مصرح به",
+      "403": "الدخول ممنوع",
+      "404": "الصفحة غير موجودة",
+      "500": "خطأ في الخادم",
+      "502": "بوابة غير صالحة",
+      "503": "الخدمة غير متوفرة",
+      "unknown": "خطأ غير معروف"
+    }
+  },
   "actions.openLink": "فتح الرابط",
   "actions.analyzeVirusTotal": "تحليل متقدم عبر VirusTotal",
   "actions.scan": "تحليل",
@@ -132,6 +148,8 @@
   "loading.generatingCode": "جاري إنشاء الكود...",
   "loading.generatingCodeDesc": "يتم إعداد رمز QR وتطبيق التخصيصات",
   "alerts.offline": "لا يوجد اتصال بالإنترنت. الفحوصات عبر الإنترنت تحسّن التحليل.",
+  "alerts.connectionErrorTitle": "خطأ في الاتصال",
+  "alerts.connectionErrorMessage": "يرجى التحقق من اتصال الإنترنت الخاص بك والمحاولة مرة أخرى.",
   "confirm.openTitle": "قبل فتح الرابط",
   "confirm.openMessage": "هل أنت متأكد أنك تريد فتح هذا الرابط؟",
   "confirm.yes": "نعم",

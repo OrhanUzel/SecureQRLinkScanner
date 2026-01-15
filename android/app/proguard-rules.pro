@@ -82,6 +82,9 @@
 # ===== REACT NATIVE VIEW SHOT =====
 -keep class fr.greweb.reactnativeviewshot.** { *; }
 
+# ===== REACT NATIVE WEBVIEW =====
+-keep class com.reactnativecommunity.webview.** { *; }
+
 # ===== GOOGLE MOBILE ADS =====
 -keep class com.google.android.gms.ads.** { *; }
 -keep class com.google.ads.** { *; }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
@@ -10,6 +10,8 @@ import Toast from '../components/Toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
+import NetInfo from '@react-native-community/netinfo';
+import StatusModal from '../components/StatusModal';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -25,6 +27,7 @@ export default function SettingsScreen() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
   const [infoModal, setInfoModal] = useState({ visible: false, title: '', message: '' });
+  const [statusModal, setStatusModal] = useState({ visible: false, title: '', message: '', type: 'error' });
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -34,6 +37,20 @@ export default function SettingsScreen() {
     });
     return unsubscribe;
   }, [navigation]);
+
+  const handlePremiumNavigation = async () => {
+    const state = await NetInfo.fetch();
+    if (!state.isConnected) {
+      setStatusModal({
+        visible: true,
+        title: t('alerts.connectionErrorTitle'),
+        message: t('alerts.connectionErrorMessage'),
+        type: 'error'
+      });
+      return;
+    }
+    navigation.navigate('Paywall');
+  };
 
   const loadSettings = async () => {
     try {
@@ -158,7 +175,7 @@ export default function SettingsScreen() {
       )}
 
       {/* Premium Upsell (Only if NOT premium) */}
-      {!premium && Platform.OS !== 'ios' && (
+      {!premium && (//ios kontrolü buradaydı 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
@@ -176,7 +193,7 @@ export default function SettingsScreen() {
             </Text>
             <TouchableOpacity 
               style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
-              onPress={() => navigation.navigate('Paywall')}
+              onPress={handlePremiumNavigation}
               activeOpacity={0.8}
             >
               <Text style={styles.disclaimerIcon}>🚀</Text>
@@ -377,6 +394,13 @@ export default function SettingsScreen() {
       </Modal>
       </ScrollView>
 
+      <StatusModal
+        visible={statusModal.visible}
+        title={statusModal.title}
+        message={statusModal.message}
+        type={statusModal.type}
+        onClose={() => setStatusModal(prev => ({ ...prev, visible: false }))}
+      />
 
     </View>  
   );

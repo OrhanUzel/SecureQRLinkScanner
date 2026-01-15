@@ -48,6 +48,22 @@
   "result.secure": "Seguro",
   "result.suspicious": "Sospechoso",
   "result.unsafe": "No seguro",
+  "webview": {
+    "errorTitle": "No se pudo cargar la página",
+    "errorMessage": "Hubo un problema al cargar la página. Por favor, verifica tu conexión a internet e inténtalo de nuevo.",
+    "retry": "Reintentar",
+    "httpError": "Error HTTP {{code}}",
+    "errors": {
+      "400": "Solicitud incorrecta",
+      "401": "Acceso no autorizado",
+      "403": "Acceso prohibido",
+      "404": "Página no encontrada",
+      "500": "Error interno del servidor",
+      "502": "Puerta de enlace incorrecta",
+      "503": "Servicio no disponible",
+      "unknown": "Error desconocido"
+    }
+  },
   "actions.openLink": "Abrir enlace",
   "actions.analyzeVirusTotal": "Análisis avanzado en VirusTotal",
   "actions.scan": "Analizar",
@@ -152,6 +168,8 @@
   "loading.generatingCode": "Generando tu código...",
   "loading.generatingCodeDesc": "Creando el QR y aplicando tus personalizaciones",
   "alerts.offline": "Sin conexión a Internet. Las comprobaciones en línea mejoran el análisis.",
+  "alerts.connectionErrorTitle": "Error de conexión",
+  "alerts.connectionErrorMessage": "Por favor, verifique su conexión a internet e inténtelo de nuevo.",
   "remoteRisk.defaultMessage": "Este enlace figura en listas externas de riesgo de seguridad. Procede con precaución.",
   "remoteRisk.checkedDomainLabel": "Dominio verificado:",
   "remoteRisk.sourcesLabel": "Fuentes:",
