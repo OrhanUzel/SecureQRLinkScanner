@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { interstitialUnitId } from '../config/adUnitIds';
-import { hasConsent } from '../components/ConsentModal';
+import { getAdRequestOptions } from '../utils/adRequestOptions';
 
 let InterstitialAd, AdEventType;
 
@@ -29,10 +29,8 @@ export function useInterstitialAd(enabled = true) {
 
     const loadAndShow = async () => {
       try {
-        const userConsented = await hasConsent();
         if (!isMounted) return;
-        
-        const requestOptions = { requestNonPersonalizedAdsOnly: !userConsented };
+        const requestOptions = await getAdRequestOptions();
         ad = InterstitialAd.createForAdRequest(interstitialUnitId, requestOptions);
 
         unsubscribeLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {

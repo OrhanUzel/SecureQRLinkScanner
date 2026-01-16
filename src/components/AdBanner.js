@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { bannerUnitId } from '../config/adUnitIds';
 import { appEvents } from '../utils/events';
+import { getAdRequestOptions } from '../utils/adRequestOptions';
 
 function AdBanner({ placement, variant, isFooter = false }) {
   const insets = useSafeAreaInsets();
@@ -13,9 +14,20 @@ function AdBanner({ placement, variant, isFooter = false }) {
   const [premium, setPremium] = useState(false);
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const [requestKey, setRequestKey] = useState(0);
+  const [requestOptions, setRequestOptions] = useState({ requestNonPersonalizedAdsOnly: true });
 
   useEffect(() => {
     let isMounted = true;
+    
+    // Determine Ad Request Options based on ATT (Apple Tracking Transparency)
+    const checkTracking = async () => {
+      try {
+        const opts = await getAdRequestOptions();
+        if (isMounted) setRequestOptions(opts);
+      } catch (e) {}
+    };
+    checkTracking();
+
     const checkPremium = async () => {
       try {
         const v = await AsyncStorage.getItem('premium');
@@ -144,11 +156,13 @@ function AdBanner({ placement, variant, isFooter = false }) {
     <View style={wrapStyle}>
       <View style={useMrec ? styles.mrecContainer : styles.adContainer}>
         <BannerAd
-          key={`${requestKey}:${bannerSize}`}
+          key={`${requestKey}:${bannerSize}:${requestOptions.requestNonPersonalizedAdsOnly}`}
           unitId={bannerUnitId}
           size={bannerSize}
+          requestOptions={requestOptions}
           onAdLoaded={onAdLoaded}
           onAdFailedToLoad={onAdFailedToLoad}
+          style={{ alignSelf: 'center' }}
         />
       </View>
     </View>

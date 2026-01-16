@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { hasConsent } from '../components/ConsentModal';
 import { rewardedUnitId, interstitialUnitId, rewardedInterstitialUnitId } from '../config/adUnitIds';
+import { getAdRequestOptions } from '../utils/adRequestOptions';
 
 let MobileAds;
 let RewardedAd, RewardedInterstitialAd, InterstitialAd, AdEventType, RewardedAdEventType;
@@ -32,8 +32,7 @@ export function useAdManager() {
 
     const task = (async () => {
       try {
-        const userConsented = await hasConsent();
-        const requestOptions = { requestNonPersonalizedAdsOnly: !userConsented };
+        const requestOptions = await getAdRequestOptions();
 
         const loadAdPromise = (AdClass, unitId, type) => {
           return new Promise((resolve, reject) => {

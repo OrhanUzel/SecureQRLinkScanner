@@ -1,34 +1,97 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal, Animated, KeyboardAvoidingView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { styles } from './CreateQrScreen.styles';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Fontisto } from '@expo/vector-icons';
 import { useAppTheme } from '../theme/ThemeContext';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
-import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { captureRef } from 'react-native-view-shot';
 import Toast from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { useAdManager } from '../hooks/useAdManager';
-import ColorPicker, { Panel1, Preview, HueSlider } from 'reanimated-color-picker';
 import StatusModal from '../components/StatusModal';
-import { runOnJS } from 'react-native-reanimated';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import QRCode from 'react-native-qrcode-svg';
 import { useInterstitialAd } from '../hooks/useInterstitialAd';
+import QrGenerationService from '../utils/QrGenerationService';
+import CreateQrStateManager from '../utils/CreateQrStateManager';
+import IconRenderer from '../components/IconRenderer';
+import QrPreviewSection from '../components/qr/QrPreviewSection';
+import IconPickerModal from '../components/qr/IconPickerModal';
+import ColorPickerModal from '../components/qr/ColorPickerModal';
+import { CUSTOM_MODES, FRAME_TEXT_MAX, QR_TEXT_MAX, ICON_LIBRARY, ICON_CATEGORIES, QUICK_LINK_TEMPLATES, BARCODE_FORMATS } from '../utils/CreateQrConstants';
 
-
-const CUSTOM_MODES = [
-  { key: 'none', icon: 'qr-code-outline', labelKey: 'custom_qr_mode.none', defaultLabel: 'Klasik' },
-  { key: 'logo', icon: 'image-outline', labelKey: 'custom_qr_mode.logo', defaultLabel: 'Logo Ortası' },
-  { key: 'logo_frame', icon: 'albums-outline', labelKey: 'custom_qr_mode.logo_frame', defaultLabel: 'Logo + Çerçeve' },
-  { key: 'frame_text', icon: 'chatbox-ellipses-outline', labelKey: 'custom_qr_mode.frame_text', defaultLabel: 'Çerçeve + Yazı' },
-];
-const FRAME_TEXT_MAX = 42;
+function QrHero({ dark, compact, heroContent, heroCardStyle }) {
+  return (
+    <View style={heroCardStyle}>
+      <View
+        style={[
+          styles.heroIconWrap,
+          {
+            backgroundColor: dark
+              ? 'rgba(37,99,235,0.16)'
+              : 'rgba(6,95,70,0.08)',
+            borderColor: dark ? '#1e293b' : '#bbf7d0',
+          },
+        ]}
+      >
+        <Ionicons
+          name={heroContent.icon}
+          size={compact ? 30 : 34}
+          color={dark ? '#4ade80' : '#059669'}
+        />
+      </View>
+      <Text
+        style={[
+          styles.heroTitle,
+          compact ? { fontSize: 22 } : null,
+          { color: dark ? '#e6edf3' : '#0b1220' },
+        ]}
+      >
+        {heroContent.title}
+      </Text>
+      <Text
+        style={[
+          styles.heroSubtitle,
+          { color: dark ? '#94a3b8' : '#4b5563' },
+        ]}
+      >
+        {heroContent.subtitle}
+      </Text>
+      <View
+        style={[
+          styles.heroBadge,
+          {
+            backgroundColor: dark
+              ? 'rgba(34,197,94,0.14)'
+              : 'rgba(16,185,129,0.08)',
+            borderColor: dark
+              ? 'rgba(52,211,153,0.5)'
+              : 'rgba(16,185,129,0.4)',
+          },
+        ]}
+      >
+        <Ionicons
+          name={heroContent.badgeIcon}
+          size={14}
+          color={dark ? '#6ee7b7' : '#059669'}
+        />
+        <Text
+          style={[
+            styles.heroBadgeText,
+            { color: dark ? '#bbf7d0' : '#047857' },
+          ]}
+        >
+          {heroContent.badge}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function CreateQrScreen() {
   const { t } = useTranslation();
@@ -60,11 +123,18 @@ export default function CreateQrScreen() {
     customGateLoading: false,
     logoBusy: false,
     missingInfoType: null,
-    statusModal: { visible: false, title: '', message: '', type: 'error' }
+    statusModal: { visible: false, title: '', message: '', type: 'error' },
+    barcodeFormatPickerVisible: false,
+    qrTypePickerVisible: false,
+    iconPickerVisible: false,
+    iconCategory: 'all',
+    iconFavorites: [],
+    lastIconId: null
   });
+  const [interstitialEnabled, setInterstitialEnabled] = useState(false);
 
   // Call the hook to show interstitial ad on mount (if not premium)
-  useInterstitialAd(!uiState.premium);
+  useInterstitialAd(!uiState.premium && interstitialEnabled);
 
   const [wifiConfig, setWifiConfig] = useState({
     ssid: '',
@@ -84,6 +154,7 @@ export default function CreateQrScreen() {
 
   const [qrSettings, setQrSettings] = useState({
     type: 'url',
+    symbolType: 'qr',
     customMode: 'none',
     customLogo: null,
     customFrameText: '',
@@ -91,20 +162,55 @@ export default function CreateQrScreen() {
     tempFrameColor: '#0f172a',
     qrColor: '#000000',
     tempQrColor: '#000000',
+    barcodeFormat: 'CODE128',
   });
 
   const [unlockState, setUnlockState] = useState({
     unlockedModes: {},
+    unlockedTemplates: {},
     pendingCustomMode: null,
     pendingQrType: null,
+    pendingTemplateKey: null,
   });
 
-  // --- Helpers for State Updates ---
-  const updateUi = (updates) => setUiState(prev => ({ ...prev, ...updates }));
-  const updateWifi = (updates) => setWifiConfig(prev => ({ ...prev, ...updates }));
-  const updateContact = (updates) => setContactInfo(prev => ({ ...prev, ...updates }));
-  const updateQr = (updates) => setQrSettings(prev => ({ ...prev, ...updates }));
-  const updateUnlock = (updates) => setUnlockState(prev => ({ ...prev, ...updates }));
+  const [quickTemplatesVisible, setQuickTemplatesVisible] = useState(
+    qrSettings.symbolType === 'qr' && qrSettings.type === 'url'
+  );
+
+  const stateManager = useMemo(
+    () =>
+      new CreateQrStateManager({
+        setUiState,
+        setWifiConfig,
+        setContactInfo,
+        setQrSettings,
+        setUnlockState,
+      }),
+    []
+  );
+
+  const updateUi = useCallback(
+    (updates) => stateManager.updateUi(updates),
+    [stateManager]
+  );
+  const updateWifi = useCallback(
+    (updates) => stateManager.updateWifi(updates),
+    [stateManager]
+  );
+  const updateContact = useCallback(
+    (updates) => stateManager.updateContact(updates),
+    [stateManager]
+  );
+  const updateQr = useCallback(
+    (updates) => stateManager.updateQr(updates),
+    [stateManager]
+  );
+  const updateUnlock = useCallback(
+    (updates) => stateManager.updateUnlock(updates),
+    [stateManager]
+  );
+
+  const qrService = useMemo(() => new QrGenerationService(), []);
 
   // --- Ad Logic (Hook) ---
   const { adLoaded, showAd, preloadAd } = useAdManager();
@@ -123,14 +229,35 @@ export default function CreateQrScreen() {
   }, [uiState.missingInfoType, t]);
 
   const gateTitle = useMemo(() => {
+    if (unlockState.pendingTemplateKey) {
+      const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
+      if (tpl) {
+        const label = t(tpl.labelKey) || tpl.fallbackLabel;
+        return t('template_unlock_title', { template: label }) || `${label} şablonunun kilidini açın`;
+      }
+    }
     if (unlockState.pendingQrType) return t('qr_type_unlock_title') || 'Bu QR tipini açın';
+    if (unlockState.pendingCustomMode === 'barcode_generate') return t('barcode_unlock_title') || 'Barkod oluşturmayı açın';
     return t('custom_qr_unlock_title') || 'Özel stilleri açın';
-  }, [unlockState.pendingQrType, t]);
+  }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
 
   const gateDesc = useMemo(() => {
+    if (unlockState.pendingTemplateKey) {
+      const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
+      const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
+      return t('template_unlock_desc', { template: label }) || 'Bu hazır şablonu logo ve çerçeve ile kullanmak için ödüllü reklam izleyin.';
+    }
     if (unlockState.pendingQrType) return t('qr_type_unlock_desc') || 'Bu QR tipini kullanmak için Premium olun ya da ödüllü reklam izleyin.';
+    if (unlockState.pendingCustomMode === 'barcode_generate') {
+      return t('barcode_unlock_desc') || 'Barkod oluşturmak için Premium olun ya da ödüllü reklam izleyin.';
+    }
     return t('custom_qr_unlock_desc') || 'Logo ve çerçeve eklemek için Premium olun ya da ödüllü reklam izleyin.';
-  }, [unlockState.pendingQrType, t]);
+  }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
+
+  const isUrlQrType = useMemo(
+    () => qrSettings.symbolType === 'qr' && qrSettings.type === 'url',
+    [qrSettings.symbolType, qrSettings.type]
+  );
 
   const cellSize = useMemo(() => {
     if (!uiState.matrix) return 6;
@@ -159,10 +286,192 @@ export default function CreateQrScreen() {
 
   const showLogoControls = useMemo(() => qrSettings.customMode === 'logo' || qrSettings.customMode === 'logo_frame', [qrSettings.customMode]);
   const showFrameControls = useMemo(() => qrSettings.customMode === 'logo_frame' || qrSettings.customMode === 'frame_text', [qrSettings.customMode]);
+  const showVisualFrame = useMemo(() => {
+    if (qrSettings.symbolType !== 'qr') return false;
+    if (showFrameControls) return true;
+    if (isIconLogo && qrSettings.customMode === 'logo') return true;
+    return false;
+  }, [qrSettings.symbolType, showFrameControls, isIconLogo, qrSettings.customMode]);
+  const iconLogoInfo = useMemo(() => {
+    if (typeof qrSettings.customLogo !== 'string') return null;
+    if (qrSettings.customLogo.startsWith('fontisto:')) {
+      return { family: 'fontisto', name: qrSettings.customLogo.slice('fontisto:'.length) };
+    }
+    if (qrSettings.customLogo.startsWith('ionicon:')) {
+      return { family: 'ionicon', name: qrSettings.customLogo.slice('ionicon:'.length) };
+    }
+    if (qrSettings.customLogo.startsWith('fontawesome:')) {
+      return { family: 'fontawesome', name: qrSettings.customLogo.slice('fontawesome:'.length) };
+    }
+    if (qrSettings.customLogo.startsWith('mci:')) {
+      return { family: 'mci', name: qrSettings.customLogo.slice('mci:'.length) };
+    }
+    if (qrSettings.customLogo.startsWith('entypo:')) {
+      return { family: 'entypo', name: qrSettings.customLogo.slice('entypo:'.length) };
+    }
+    if (qrSettings.customLogo.startsWith('feather:')) {
+      return { family: 'feather', name: qrSettings.customLogo.slice('feather:'.length) };
+    }
+    return null;
+  }, [qrSettings.customLogo]);
+  const isIconLogo = !!iconLogoInfo;
+
+  const previewCategoryKey = uiState.iconCategory || 'all';
+  const previewCategoryMeta = ICON_CATEGORIES.find((c) => c.key === previewCategoryKey) || ICON_CATEGORIES[0];
+  const previewIcon = ICON_LIBRARY.find((i) => i.id === uiState.lastIconId) || null;
+  const previewTheme = previewIcon && previewIcon.theme;
+  const previewQrColor = previewTheme && previewTheme.qrColor
+    ? previewTheme.qrColor
+    : (previewIcon && previewIcon.color) || previewCategoryMeta.color || '#2563eb';
+  const previewFrameColor = previewTheme && previewTheme.frameColor
+    ? previewTheme.frameColor
+    : previewQrColor;
+
+  const quickTemplatesOpacity = useRef(new Animated.Value(isUrlQrType ? 1 : 0)).current;
+  const quickTemplatesTranslateY = useRef(new Animated.Value(isUrlQrType ? 0 : 16)).current;
+
+  useEffect(() => {
+    if (isUrlQrType) {
+      setQuickTemplatesVisible(true);
+      Animated.parallel([
+        Animated.timing(quickTemplatesOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(quickTemplatesTranslateY, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(quickTemplatesOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(quickTemplatesTranslateY, {
+          toValue: 16,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          setQuickTemplatesVisible(false);
+        }
+      });
+    }
+  }, [isUrlQrType, quickTemplatesOpacity, quickTemplatesTranslateY]);
+
+  const selectedBarcodeFormat = useMemo(() => {
+    const found = BARCODE_FORMATS.find(f => f.k === qrSettings.barcodeFormat);
+    return found || BARCODE_FORMATS[0];
+  }, [qrSettings.barcodeFormat]);
+
+  const isNumericOnlyBarcodeFormat = useMemo(() => {
+    const fmt = qrSettings.barcodeFormat;
+    if (!fmt) return false;
+    return [
+      'EAN13',
+      'EAN8',
+      'EAN5',
+      'EAN2',
+      'UPC',
+      'UPCE',
+      'ITF14',
+      'ITF',
+      'MSI',
+      'MSI10',
+      'MSI11',
+      'MSI1010',
+      'MSI1110',
+      'pharmacode',
+      'CODE128C'
+    ].includes(fmt);
+  }, [qrSettings.barcodeFormat]);
+
+  const barcodeLengthSpec = useMemo(() => {
+    const fmt = qrSettings.barcodeFormat;
+    if (!fmt) return null;
+    if (fmt === 'EAN13') return { max: 13, exact: true };
+    if (fmt === 'EAN8') return { max: 8, exact: true };
+    if (fmt === 'EAN5') return { max: 5, exact: true };
+    if (fmt === 'EAN2') return { max: 2, exact: true };
+    if (fmt === 'UPC') return { max: 12, exact: true };
+    if (fmt === 'UPCE') return { max: 8, exact: false };
+    if (fmt === 'ITF14') return { max: 14, exact: true };
+    if (fmt === 'ITF') return { max: 80, exact: false };
+    if (fmt === 'MSI' || fmt === 'MSI10' || fmt === 'MSI11' || fmt === 'MSI1010' || fmt === 'MSI1110') {
+      return { max: 30, exact: false };
+    }
+    if (fmt === 'pharmacode') return { max: 6, exact: false };
+    if (fmt === 'CODE39') return { max: 43, exact: false };
+    if (fmt === 'CODE128' || fmt === 'CODE128A' || fmt === 'CODE128B' || fmt === 'CODE128C') {
+      return { max: 80, exact: false };
+    }
+    if (fmt === 'codabar') return { max: 20, exact: false };
+    return null;
+  }, [qrSettings.barcodeFormat]);
 
   const frameLabelText = useMemo(() => {
-    return qrSettings.customFrameText.trim() || t('custom_qr_default_label') || 'SCAN ME';
-  }, [qrSettings.customFrameText, t]);
+    return qrSettings.customFrameText.trim();
+  }, [qrSettings.customFrameText]);
+  const hasFrameText = frameLabelText.length > 0;
+
+  const handleInputChange = useCallback(
+    (text) => {
+      let value = text;
+      if (qrSettings.symbolType === 'barcode') {
+        const fmt = qrSettings.barcodeFormat;
+        if (isNumericOnlyBarcodeFormat) {
+          value = text.replace(/[^0-9]/g, '');
+        } else if (fmt === 'CODE39') {
+          value = text.toUpperCase().replace(/[^0-9A-Z\-\.\ \$\/\+\%]/g, '');
+        } else if (fmt === 'codabar') {
+          value = text.toUpperCase().replace(/[^0-9\-\$\:\.\/\+ABCD]/g, '');
+        } else if (fmt === 'CODE128A') {
+          value = text.toUpperCase().replace(/[^\x20-\x5F]/g, '');
+        } else if (fmt === 'CODE128' || fmt === 'CODE128B') {
+          value = text.replace(/[^\x20-\x7E]/g, '');
+        }
+      }
+      updateUi({ input: value });
+    },
+    [qrSettings.symbolType, qrSettings.barcodeFormat, isNumericOnlyBarcodeFormat, updateUi]
+  );
+
+  const isBarcodeLengthMaxed = useMemo(() => {
+    if (!barcodeLengthSpec || qrSettings.symbolType !== 'barcode') return false;
+    const len = (uiState.input || '').trim().length;
+    return len >= barcodeLengthSpec.max;
+  }, [barcodeLengthSpec, qrSettings.symbolType, uiState.input]);
+
+  const handleIconSelect = useCallback((icon) => {
+    if (!uiState.premium && !unlockState.unlockedModes.icon_pack) {
+      updateUnlock({ pendingCustomMode: 'logo_frame' });
+      updateUi({ customGateVisible: true });
+      return;
+    }
+
+    const token = `${icon.family}:${icon.name}`;
+    const updates = { customLogo: token };
+    const theme = icon.theme || {};
+
+    const nextMode = theme.mode || 'logo_frame';
+    const nextQrColor = theme.qrColor || icon.color || qrSettings.qrColor || '#000000';
+    const nextFrameColor = theme.frameColor || nextQrColor;
+
+    updates.customMode = nextMode;
+    updates.frameThemeColor = nextFrameColor;
+    updates.tempFrameColor = nextFrameColor;
+    updates.qrColor = nextQrColor;
+    updates.tempQrColor = nextQrColor;
+
+    updateQr(updates);
+    updateUi({ iconPickerVisible: false, lastIconId: icon.id });
+  }, [uiState.premium, unlockState.unlockedModes, qrSettings.qrColor, updateQr, updateUi, updateUnlock]);
 
   const isModeUnlocked = useCallback((modeKey) => {
     if (modeKey === 'none') return true;
@@ -194,6 +503,21 @@ export default function CreateQrScreen() {
     return unsubscribe;
   }, [navigation]);
 
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        const v = await AsyncStorage.getItem('icon-favorites');
+        if (v) {
+          const arr = JSON.parse(v);
+          if (Array.isArray(arr)) {
+            updateUi({ iconFavorites: arr });
+          }
+        }
+      } catch {}
+    };
+    loadFavorites();
+  }, []);
+
   const ensureCustomAccess = useCallback((modeKey) => {
     if (modeKey === 'none') return true;
     if (isModeUnlocked(modeKey)) return true;
@@ -215,6 +539,22 @@ export default function CreateQrScreen() {
     updateUi({ customGateVisible: true });
   }, [uiState.premium, isModeUnlocked]);
 
+  const ensureBarcodeAccess = useCallback(() => {
+    if (qrSettings.symbolType !== 'barcode') return true;
+    if (uiState.premium) return true;
+    if (unlockState.unlockedModes.barcode_generate) return true;
+
+    updateUnlock({ pendingCustomMode: 'barcode_generate', pendingQrType: null });
+    updateUi({ customGateVisible: true });
+    return false;
+  }, [qrSettings.symbolType, uiState.premium, unlockState.unlockedModes]);
+
+  const isBarcodeGenerateLocked = useMemo(() => {
+    if (qrSettings.symbolType !== 'barcode') return false;
+    if (uiState.premium) return false;
+    return !unlockState.unlockedModes.barcode_generate;
+  }, [qrSettings.symbolType, uiState.premium, unlockState.unlockedModes]);
+
   const ensureTypeAccess = useCallback((typeKey) => {
     const needsUnlock = ['wifi', 'tel', 'email', 'sms'].includes(typeKey);
     if (!needsUnlock) return true;
@@ -232,8 +572,49 @@ export default function CreateQrScreen() {
 
   const closeCustomGate = useCallback(() => {
     updateUi({ customGateVisible: false, rewardUnlocked: false, unlockModalVisible: false });
-    updateUnlock({ pendingCustomMode: null, pendingQrType: null });
+    updateUnlock({ pendingCustomMode: null, pendingQrType: null, pendingTemplateKey: null });
   }, []);
+
+  const applyRewardUnlock = useCallback(() => {
+    setUnlockState((prev) => {
+      const nextModes = { ...prev.unlockedModes };
+      if (prev.pendingCustomMode && prev.pendingCustomMode !== 'none') nextModes[prev.pendingCustomMode] = true;
+      if (prev.pendingQrType) nextModes[prev.pendingQrType] = true;
+      if (!nextModes.icon_pack) nextModes.icon_pack = true;
+
+      const nextTemplates = { ...(prev.unlockedTemplates || {}) };
+      if (prev.pendingTemplateKey) nextTemplates[prev.pendingTemplateKey] = true;
+
+      return { ...prev, unlockedModes: nextModes, unlockedTemplates: nextTemplates };
+    });
+
+    if (unlockState.pendingCustomMode && unlockState.pendingCustomMode !== 'qr_color') {
+      updateQr({ customMode: unlockState.pendingCustomMode });
+    }
+    if (unlockState.pendingQrType) {
+      updateQr({ type: unlockState.pendingQrType });
+    }
+
+    if (unlockState.pendingTemplateKey) {
+      const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
+      if (tpl) {
+        const label = t(tpl.labelKey) || tpl.fallbackLabel;
+        updateUi({ input: tpl.example, error: null });
+        updateQr({
+          customMode: 'logo_frame',
+          customLogo: `fontisto:${tpl.icon}`,
+          customFrameText: '',
+          frameThemeColor: tpl.color,
+          tempFrameColor: tpl.color,
+          qrColor: tpl.color,
+          tempQrColor: tpl.color
+        });
+      }
+    }
+
+    closeCustomGate();
+    updateUi({ toast: { visible: true, type: 'success', message: t('custom_qr_unlocked') || 'Bu seçenek açıldı!' } });
+  }, [unlockState.pendingCustomMode, unlockState.pendingQrType, unlockState.pendingTemplateKey, closeCustomGate, t, updateQr, updateUi]);
 
   const handleWatchAdUnlock = useCallback(async () => {
     if (uiState.customGateLoading) return;
@@ -251,37 +632,43 @@ export default function CreateQrScreen() {
     }
 
     updateUi({ customGateLoading: true });
-    
-    // Use preloaded ad
+
+    let finished = false;
+    let unlocked = false;
+
+    const timeoutId = setTimeout(async () => {
+      if (finished || unlocked) return;
+      const state = await NetInfo.fetch();
+      if (state.isConnected) {
+        unlocked = true;
+        applyRewardUnlock();
+      }
+    }, 8000);
+
     const res = await showAd();
-    
+
+    finished = true;
+    clearTimeout(timeoutId);
     updateUi({ customGateLoading: false });
 
-    if (res.ok) {
-      setUnlockState((prev) => {
-        const next = { ...prev.unlockedModes };
-        if (prev.pendingCustomMode && prev.pendingCustomMode !== 'none') next[prev.pendingCustomMode] = true;
-        if (prev.pendingQrType) next[prev.pendingQrType] = true;
-        return { ...prev, unlockedModes: next };
-      });
-
-      if (unlockState.pendingCustomMode && unlockState.pendingCustomMode !== 'qr_color') updateQr({ customMode: unlockState.pendingCustomMode });
-      if (unlockState.pendingQrType) updateQr({ type: unlockState.pendingQrType });
-      
-      closeCustomGate();
-      updateUi({ toast: { visible: true, type: 'success', message: t('custom_qr_unlocked') || 'Bu seçenek açıldı!' } });
-    } else {
-        // Error handling
-        const error = res.error;
-        const isNotReady = error === 'not_ready';
-        const title = t('ads.modal.title') || 'Reklam';
-        const message = isNotReady
-           ? (t('ads.modal.notReady') || 'Reklam şu anda hazır değil. Lütfen biraz bekleyin ve tekrar deneyin.')
-           : (t('ads.modal.generic') || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
-        
-        updateUi({ adInfoModal: { visible: true, title, message } });
+    if (unlocked) {
+      return;
     }
-  }, [uiState.customGateLoading, unlockState.pendingCustomMode, unlockState.pendingQrType, closeCustomGate, t, showAd]);
+
+    if (res.ok) {
+      unlocked = true;
+      applyRewardUnlock();
+    } else {
+      const error = res.error;
+      const isNotReady = error === 'not_ready';
+      const title = t('ads.modal.title') || 'Reklam';
+      const message = isNotReady
+         ? (t('ads.modal.notReady') || 'Reklam şu anda hazır değil. Lütfen biraz bekleyin ve tekrar deneyin.')
+         : (t('ads.modal.generic') || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
+      
+      updateUi({ adInfoModal: { visible: true, title, message } });
+    }
+  }, [uiState.customGateLoading, t, showAd, applyRewardUnlock, updateUi]);
 
   const handlePremiumNavigation = useCallback(async () => {
     const state = await NetInfo.fetch();
@@ -301,7 +688,7 @@ export default function CreateQrScreen() {
   }, [closeCustomGate, navigation, t]);
 
   const onColorChange = useCallback((hex) => {
-    if (uiState.colorPickerTarget === 'qr') {
+    if (uiState.colorPickerTarget !== 'frame') {
       updateQr({ tempQrColor: hex });
     } else {
       updateQr({ tempFrameColor: hex });
@@ -330,7 +717,23 @@ export default function CreateQrScreen() {
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
-        updateQr({ customLogo: result.assets[0].uri });
+        let finalUri = result.assets[0].uri;
+        
+        // Resize if too large to prevent memory issues
+        try {
+          const manipResult = await ImageManipulator.manipulateAsync(
+            finalUri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.8, format: ImageManipulator.SaveFormat.PNG }
+          );
+          if (manipResult?.uri) {
+            finalUri = manipResult.uri;
+          }
+        } catch (e) {
+          // Fallback to original if resize fails
+        }
+
+        updateQr({ customLogo: finalUri });
         if (qrSettings.customMode === 'none') updateQr({ customMode: 'logo' });
       }
     } catch (e) {
@@ -340,62 +743,62 @@ export default function CreateQrScreen() {
     }
   }, [uiState.logoBusy, ensureCustomAccess, qrSettings.customMode, t]);
 
-  const generateMatrix = useCallback(async (text) => {
-    try {
-      if (!text || !text.trim()) {
-        updateUi({ matrix: null, generatedContent: null, error: null });
-        return;
+  const generateMatrix = useCallback(
+    async (text) => {
+      try {
+        const result = await qrService.generateMatrix(text);
+        if (!result.matrix) {
+          updateUi({
+            matrix: null,
+            generatedContent: null,
+            error: null,
+          });
+          return;
+        }
+
+        updateUi({
+          matrix: result.matrix,
+          generatedContent: result.generatedContent,
+          error: null,
+        });
+      } catch (e) {
+        updateUi({
+          matrix: null,
+          generatedContent: null,
+          error: t('qr_generation_error') || 'QR kod oluşturulamadı.',
+        });
+      } finally {
+        updateUi({ generating: false });
       }
-      updateUi({ generating: true, error: null });
-      await new Promise(r => setTimeout(r, 100));
+    },
+    [qrService, t, updateUi]
+  );
 
-      // Set matrix to a dummy object to satisfy legacy checks (if any) and enable display
-      updateUi({ matrix: { size: 100, rows: [] }, generatedContent: text, error: null });
-    } catch (e) {
-      updateUi({ matrix: null, generatedContent: null, error: t('qr_generation_error') || 'QR kod oluşturulamadı.' });
-    } finally {
-      updateUi({ generating: false });
-    }
-  }, [t]);
+  const validateBarcodeContent = useCallback(
+    (raw) => qrService.validateBarcodeContent(qrSettings.barcodeFormat, raw),
+    [qrService, qrSettings.barcodeFormat]
+  );
 
-  const buildPayload = useCallback(() => {
-    const type = qrSettings.type;
-    if (type === 'url' || type === 'text') return (uiState.input || '').trim();
-    
-    if (type === 'wifi') {
-      const esc = (s) => (s || '').replace(/([\\;,:])/g, '\\$1');
-      const t = wifiConfig.security === 'nopass' ? 'nopass' : (wifiConfig.security === 'WEP' ? 'WEP' : 'WPA');
-      const parts = [`T:${t}`, `S:${esc(wifiConfig.ssid)}`];
-      if (t !== 'nopass') parts.push(`P:${esc(wifiConfig.password)}`);
-      if (wifiConfig.hidden) parts.push('H:true');
-      return 'WIFI:' + parts.join(';') + ';';
-    }
-    
-    if (type === 'tel') {
-      const n = (contactInfo.phone || '').trim();
-      return n ? `tel:${n}` : '';
-    }
-    
-    if (type === 'email') {
-      const to = (contactInfo.email || '').trim();
-      const q = [];
-      if (contactInfo.subject) q.push(`subject=${encodeURIComponent(contactInfo.subject)}`);
-      if (contactInfo.body) q.push(`body=${encodeURIComponent(contactInfo.body)}`);
-      const query = q.length ? `?${q.join('&')}` : '';
-      return to ? `mailto:${to}${query}` : '';
-    }
-    
-    if (type === 'sms') {
-      const n = (contactInfo.smsNumber || '').trim();
-      const b = (contactInfo.smsBody || '').trim();
-      if (!n && !b) return '';
-      return b ? `SMSTO:${n}:${b}` : `SMSTO:${n}`;
-    }
-    
-    return '';
-  }, [qrSettings.type, uiState.input, wifiConfig, contactInfo]);
+  const buildPayload = useCallback(
+    () =>
+      qrService.buildPayload({
+        type: qrSettings.type,
+        symbolType: qrSettings.symbolType,
+        input: uiState.input,
+        wifiConfig,
+        contactInfo,
+      }),
+    [qrService, qrSettings.type, qrSettings.symbolType, uiState.input, wifiConfig, contactInfo]
+  );
 
-  const payloadLength = useMemo(() => (buildPayload() || '').length, [buildPayload]);
+  const payloadLength = useMemo(
+    () => qrService.payloadLength(buildPayload()),
+    [qrService, buildPayload]
+  );
+
+  useEffect(() => {
+    lastGeneratedRef.current = '';
+  }, [qrSettings.symbolType, qrSettings.barcodeFormat]);
 
   const canGenerate = () => {
     const type = qrSettings.type;
@@ -411,32 +814,132 @@ export default function CreateQrScreen() {
   };
 
   const onGenerate = async () => {
+    if (__DEV__) {
+      console.log('[CreateQrScreen] onGenerate pressed', {
+        symbolType: qrSettings.symbolType,
+        type: qrSettings.type,
+        barcodeFormat: qrSettings.barcodeFormat,
+        input: uiState.input,
+      });
+    }
+
+    if (!ensureBarcodeAccess()) {
+      if (__DEV__) {
+        console.log('[CreateQrScreen] ensureBarcodeAccess blocked generation', {
+          symbolType: qrSettings.symbolType,
+          unlockedModes: unlockState.unlockedModes,
+          premium: uiState.premium,
+        });
+      }
+      return;
+    }
+
     if (!canGenerate()) {
+      if (__DEV__) {
+        console.log('[CreateQrScreen] canGenerate is false', {
+          type: qrSettings.type,
+          wifiConfig,
+          contactInfo,
+          input: uiState.input,
+        });
+      }
       updateUi({ missingInfoType: qrSettings.type });
       return;
     }
-    const payload = buildPayload();
-    if (!payload) { updateUi({ matrix: null, error: null }); return; }
-    if (payload === lastGeneratedRef.current && uiState.matrix) return;
+
+    let payload = '';
+    const type = qrSettings.type;
+
+    if ((type === 'url' || type === 'text') && qrSettings.symbolType === 'barcode') {
+      const raw = (uiState.input || '').trim();
+      if (__DEV__) {
+        console.log('[CreateQrScreen] barcode validation start', {
+          raw,
+          barcodeFormat: qrSettings.barcodeFormat,
+        });
+      }
+      const validation = validateBarcodeContent(raw);
+      if (!validation.ok) {
+        if (__DEV__) {
+          console.log('[CreateQrScreen] barcode validation failed', {
+            reason: validation.reason,
+            raw,
+            barcodeFormat: qrSettings.barcodeFormat,
+          });
+        }
+        let message;
+        if (validation.reason === 'non_numeric') {
+          message = t('barcode.input.numericOnly') || 'Bu barkod için sadece rakam girin.';
+        } else if (validation.reason === 'length') {
+          message = t('barcode.input.lengthError') || 'Bu barkod için geçersiz uzunluk.';
+        } else if (validation.reason === 'charset') {
+          message = t('barcode.input.charsetError') || 'Bu barkod için geçersiz karakterler.';
+        } else if (validation.reason === 'range') {
+          message = t('barcode.input.rangeError') || 'Bu barkod için geçersiz sayı aralığı.';
+        } else if (validation.reason === 'empty') {
+          message = t('barcode.input.invalid') || 'Barkod verisi geçerli değil.';
+        } else {
+          message = t('barcode.input.invalid') || 'Barkod verisi geçerli değil.';
+        }
+        updateUi({ error: message });
+        return;
+      }
+      if (__DEV__) {
+        console.log('[CreateQrScreen] barcode validation ok', {
+          value: validation.value,
+          length: validation.value.length,
+          barcodeFormat: qrSettings.barcodeFormat,
+        });
+      }
+      updateUi({ error: null });
+      payload = validation.value;
+    } else {
+      payload = buildPayload();
+      if (__DEV__) {
+        console.log('[CreateQrScreen] non-barcode payload built', {
+          type,
+          symbolType: qrSettings.symbolType,
+          payload,
+          length: payload ? payload.length : 0,
+        });
+      }
+    }
+
+    if (!payload) {
+      if (__DEV__) {
+        console.log('[CreateQrScreen] empty payload, clearing matrix');
+      }
+      updateUi({ matrix: null, error: null });
+      return;
+    }
+    if (payload === lastGeneratedRef.current && uiState.matrix) {
+      if (__DEV__) {
+        console.log('[CreateQrScreen] payload unchanged, skipping generation');
+      }
+      return;
+    }
     
     lastGeneratedRef.current = payload;
+    if (__DEV__) {
+      console.log('[CreateQrScreen] generating matrix', {
+        payload,
+        length: payload.length,
+        symbolType: qrSettings.symbolType,
+        barcodeFormat: qrSettings.barcodeFormat,
+      });
+    }
+    updateUi({ generating: true });
     Keyboard.dismiss();
     await generateMatrix(payload);
   };
 
-  const getFilename = () => {
-    const now = new Date();
-    const ts = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    return `Secure_QR_${ts}.png`;
-  };
+  const getFilename = () => qrService.getFilename();
 
-  const buildCanvasDataUrl = () => {
-    // Web canvas generation is temporarily disabled due to SVG migration.
-    return null;
-  };
+  const buildCanvasDataUrl = () => qrService.buildCanvasDataUrl();
 
   const onDownload = async () => {
     if (!uiState.matrix) return;
+    if (!uiState.premium) setInterstitialEnabled(true);
     try {
       const filename = getFilename();
       if (isWeb) {
@@ -469,6 +972,7 @@ export default function CreateQrScreen() {
   };
 
   const onShare = async () => {
+    if (!uiState.premium) setInterstitialEnabled(true);
     try {
       const filename = getFilename();
       if (isWeb) {
@@ -502,101 +1006,843 @@ export default function CreateQrScreen() {
   const containerStyle = [styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }];
   const contentStyle = [styles.contentContainer, compact ? { padding: 12, paddingBottom: 24 } : null];
   const heroCardStyle = [styles.heroCard, {
-    backgroundColor: dark ? '#0d1523' : '#ffffff',
+    backgroundColor: dark ? '#111827' : '#ffffff',
     borderColor: dark ? '#1f2937' : '#dbe2ea',
-    shadowColor: dark ? '#0b1220' : '#4a9eff',
+    shadowColor: dark ? '#000000' : '#4a9eff',
   }];
   const inputStyle = [styles.input, {
-    backgroundColor: dark ? '#0d1523' : '#ffffff',
+    backgroundColor: dark ? '#111827' : '#ffffff',
     color: dark ? '#e6edf3' : '#0b1220',
-    borderColor: uiState.error ? (dark ? '#ff6b6b' : '#dc2626') : (dark ? '#1b2330' : '#dde3ea'),
+    borderColor: uiState.error ? (dark ? '#ef4444' : '#dc2626') : (dark ? '#1f2937' : '#dde3ea'),
     height: uiState.inputHeight
   }];
 
-  return (
-    <View style={{ flex: 1 }}>
-      <ScrollView style={containerStyle} contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View style={heroCardStyle}>
-          <View style={[styles.heroIconWrap, { backgroundColor: dark ? 'rgba(74,158,255,0.08)' : 'rgba(0,102,204,0.08)', borderColor: dark ? '#243044' : '#dbe2ea' }]}>
-            <Ionicons name="qr-code" size={compact ? 30 : 34} color={dark ? '#4a9eff' : '#0066cc'} />
-          </View>
-          <Text style={[styles.heroTitle, compact ? { fontSize: 22 } : null, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-            {t('qr_generator_title') || 'QR Kod Oluşturucu'}
-          </Text>
-          <Text style={[styles.heroSubtitle, { color: dark ? '#94a3b8' : '#4b5563' }]}>
-            {t('qr_generator_subtitle') || 'Bağlantı, Wi‑Fi, metin ve daha fazlası için zahmetsiz QR kodları oluşturun.'}
-          </Text>
-          <View style={[styles.heroBadge, { backgroundColor: dark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)', borderColor: dark ? 'rgba(37,99,235,0.35)' : 'rgba(37,99,235,0.45)' }]}>
-            <Ionicons name="sparkles" size={14} color={dark ? '#93c5fd' : '#2563eb'} />
-            <Text style={[styles.heroBadgeText, { color: dark ? '#cbd5f5' : '#1d4ed8' }]}>{t('qr_generator_badge') || 'Modern & hızlı'}</Text>
-          </View>
-        </View>
+  const heroContent = useMemo(() => {
+    const commonBadge = t('hero.qr_badge') || 'Modern & Hızlı';
+    const commonBadgeIcon = 'sparkles';
+    if (qrSettings.symbolType === 'barcode') {
+      return {
+        title: t('hero.barcode_title') || 'Barkod Oluşturucu',
+        subtitle: t('hero.barcode_subtitle') || 'Ürünler, envanter ve lojistik için endüstri standardı barkodlar oluşturun.',
+        badge: commonBadge,
+        icon: 'barcode-outline',
+        badgeIcon: commonBadgeIcon
+      };
+    }
+    return {
+      title: t('hero.qr_title') || 'QR Kod Oluşturucu',
+      subtitle: t('hero.qr_subtitle') || 'Bağlantı, Wi-Fi, metin ve daha fazlası için zahmetsiz QR kodları oluşturun.',
+      badge: commonBadge,
+      icon: 'qr-code',
+      badgeIcon: commonBadgeIcon
+    };
+  }, [qrSettings.symbolType, t]);
 
-        {/* Input Section */}
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={insets.top}
+    >
+      <ScrollView style={containerStyle} contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
+        <QrHero dark={dark} compact={compact} heroContent={heroContent} heroCardStyle={heroCardStyle} />
+
         <View style={styles.inputSection}>
-          <View style={[styles.typeCard, { backgroundColor: dark ? '#0d1523' : '#ffffff', borderColor: dark ? '#1f2937' : '#dbe2ea', shadowColor: dark ? '#0b1220' : '#4a9eff' }]}>
+          <View style={[styles.segmented, { borderColor: dark ? '#1f2937' : '#cbd5f5', backgroundColor: dark ? 'rgba(15,23,42,0.9)' : '#eef2ff' }]}>
+            {[
+              { k: 'qr', label: t('code_type.qr') || 'QR Kod', icon: 'qr-code-outline' },
+              { k: 'barcode', label: t('code_type.barcode') || 'Barkod', icon: 'barcode-outline' },
+            ].map(opt => {
+              const active = qrSettings.symbolType === opt.k;
+              return (
+                <TouchableOpacity
+                  key={opt.k}
+                  onPress={() => {
+                    if (opt.k === 'barcode') {
+                      updateQr({ symbolType: opt.k, type: 'text' });
+                      updateUi({ error: null });
+                    } else {
+                      const wasBarcode = qrSettings.symbolType === 'barcode';
+                      updateQr({
+                        symbolType: opt.k,
+                        type: qrSettings.symbolType === 'qr' ? qrSettings.type : 'url'
+                      });
+                      updateUi(
+                        wasBarcode
+                          ? { input: '', error: null, matrix: null, generatedContent: null, inputHeight: 44 }
+                          : { error: null }
+                      );
+                    }
+                  }}
+                  style={[styles.segBtn, active ? [styles.segBtnActive, { shadowColor: dark ? '#0ea5e9' : '#2563eb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4 }] : null]}
+                  activeOpacity={0.9}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name={opt.icon} size={16} color={active ? '#fff' : dark ? '#9ca3af' : '#1e293b'} />
+                    <Text
+                      style={[
+                        styles.segText,
+                        { color: active ? '#fff' : dark ? '#9ca3af' : '#1e293b', textAlign: 'center' }
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={[styles.typeCard, { backgroundColor: dark ? '#111827' : '#ffffff', borderColor: dark ? '#1f2937' : '#dbe2ea', shadowColor: dark ? '#000000' : '#4a9eff' }]}>
             <View style={{ marginBottom: 8 }}>
-              <Text style={[styles.customTitle, { color: dark ? '#b1bac4' : '#4a5568', fontSize: 16 }]}>{t('input_label') || 'İçerik Türü'}</Text>
+              <Text style={[styles.customTitle, { color: dark ? '#d1d5db' : '#4a5568', fontSize: 16 }]}>
+                {qrSettings.symbolType === 'qr'
+                  ? (t('qr_type_label') || 'QR Tipleri')
+                  : (t('barcode_type_label') || 'Barkod Tipi')}
+              </Text>
             </View>
-            <View style={styles.typeRow}>
-              {[
-                { k: 'url', label: t('label.url') || 'URL', icon: 'link-outline' },
-                { k: 'text', label: t('label.content') || 'Metin', icon: 'document-text-outline' },
-                { k: 'wifi', label: t('label.wifi') || 'Wi‑Fi', icon: 'wifi-outline' },
-                { k: 'tel', label: t('label.phone') || 'Telefon', icon: 'call-outline' },
-                { k: 'email', label: t('label.email') || 'E‑posta', icon: 'mail-outline' },
-                { k: 'sms', label: t('label.sms') || 'SMS', icon: 'chatbubbles-outline' }
-              ].map((opt) => {
-                const active = qrSettings.type === opt.k;
-                return (
-                  <TouchableOpacity
-                    key={opt.k}
-                    onPress={() => handleQrTypePress(opt.k)}
-                    style={[styles.typeChip, { backgroundColor: dark ? '#0f172a' : '#f7f9fb', borderColor: dark ? '#243044' : '#dbe2ea' }, active ? styles.typeChipActive : null]}
-                    activeOpacity={0.9}
-                  >
-                    <View style={[styles.typeIconWrap, { backgroundColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: dark ? '#243044' : '#e5eaf1' }, active ? styles.typeIconWrapActive : null]}>
-                      <Ionicons name={opt.icon} size={18} color={active ? '#fff' : (dark ? '#c3dafe' : '#2563eb')} />
+            {qrSettings.symbolType === 'qr' ? (
+              <View style={styles.typeRow}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    updateUi({ qrTypePickerVisible: true });
+                  }}
+                 style={[
+                  styles.typeChip,
+                  {
+                    backgroundColor: dark ? '#111827' : '#f7f9fb',
+                    borderColor: dark ? '#1f2937' : '#dbe2ea',
+                    minWidth: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }
+                ]}
+                  activeOpacity={0.9}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <View
+                      style={[
+                        styles.typeIconWrap,
+                        {
+                          backgroundColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                          borderColor: dark ? '#1f2937' : '#e5eaf1'
+                        }
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          qrSettings.type === 'url'
+                            ? 'link-outline'
+                            : qrSettings.type === 'text'
+                            ? 'document-text-outline'
+                            : qrSettings.type === 'wifi'
+                            ? 'wifi-outline'
+                            : qrSettings.type === 'tel'
+                            ? 'call-outline'
+                            : qrSettings.type === 'email'
+                            ? 'mail-outline'
+                            : 'chatbubbles-outline'
+                        }
+                        size={18}
+                        color={dark ? '#c3dafe' : '#2563eb'}
+                      />
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                      <Text style={[styles.typeChipText, { color: active ? '#fff' : (dark ? '#8b98a5' : '#0b1220'), flex: 1 }]}>{opt.label}</Text>
-                      {['wifi', 'tel', 'email', 'sms'].includes(opt.k) && !uiState.premium && !unlockState.unlockedModes[opt.k] && (
-                        <Ionicons name="lock-closed" size={14} color={active ? '#fff' : '#f97316'} />
-                      )}
+                    <Text
+                      style={[
+                        styles.typeChipText,
+                        { color: dark ? '#8b98a5' : '#0b1220', flex: 1 }
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {qrSettings.type === 'url'
+                        ? t('label.url') || 'URL'
+                        : qrSettings.type === 'text'
+                        ? t('label.content') || 'Metin'
+                        : qrSettings.type === 'wifi'
+                        ? t('label.wifi') || 'Wi‑Fi'
+                        : qrSettings.type === 'tel'
+                        ? t('label.phone') || 'Telefon'
+                        : qrSettings.type === 'email'
+                        ? t('label.email') || 'E‑posta'
+                        : t('label.sms') || 'SMS'}
+                    </Text>
+                    {['wifi', 'tel', 'email', 'sms'].includes(qrSettings.type) && !uiState.premium && !unlockState.unlockedModes[qrSettings.type] && (
+                      <Ionicons name="lock-closed" size={14} color="#f97316" />
+                    )}
+                  </View>
+                  <Ionicons
+                    name={uiState.qrTypePickerVisible ? 'chevron-up-outline' : 'chevron-down-outline'}
+                    size={18}
+                    color={dark ? '#8b98a5' : '#64748b'}
+                  />
+                </TouchableOpacity>
+
+                <Modal
+                  visible={uiState.qrTypePickerVisible}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => updateUi({ qrTypePickerVisible: false })}
+                >
+                  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      activeOpacity={1}
+                      onPress={() => updateUi({ qrTypePickerVisible: false })}
+                    />
+                    <View
+                      style={{
+                        backgroundColor: dark ? '#111827' : '#ffffff',
+                        paddingHorizontal: 16,
+                        paddingTop: 12,
+                        paddingBottom: 24,
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        borderWidth: 1,
+                        borderColor: dark ? '#1f2937' : '#e2e8f0'
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.customTitle,
+                            { color: dark ? '#e6edf3' : '#0b1220', fontSize: 16 }
+                          ]}
+                        >
+                          {t('qr_type_label') || 'QR Tipleri'}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => updateUi({ qrTypePickerVisible: false })}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.85}
+                          style={[
+                            styles.modalCloseButton,
+                            {
+                              backgroundColor: dark ? '#111827' : '#f8fafc',
+                              borderColor: dark ? '#1f2937' : '#e2e8f0',
+                              shadowColor: dark ? '#000' : '#64748b',
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.2,
+                              shadowRadius: 4,
+                              elevation: 3
+                            }
+                          ]}
+                        >
+                          <Ionicons
+                            name="close"
+                            size={18}
+                            color={dark ? '#9ca3af' : '#64748b'}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView
+                        style={{ maxHeight: 320 }}
+                        contentContainerStyle={{ paddingTop: 4, paddingBottom: 4, gap: 8 }}
+                      >
+                        {[
+                          { k: 'url', label: t('label.url') || 'URL', icon: 'link-outline' },
+                          { k: 'text', label: t('label.content') || 'Metin', icon: 'document-text-outline' },
+                          { k: 'wifi', label: t('label.wifi') || 'Wi‑Fi', icon: 'wifi-outline' },
+                          { k: 'tel', label: t('label.phone') || 'Telefon', icon: 'call-outline' },
+                          { k: 'email', label: t('label.email') || 'E‑posta', icon: 'mail-outline' },
+                          { k: 'sms', label: t('label.sms') || 'SMS', icon: 'chatbubbles-outline' }
+                        ].map((opt) => {
+                          const active = qrSettings.type === opt.k;
+                          const locked = ['wifi', 'tel', 'email', 'sms'].includes(opt.k) && !uiState.premium && !unlockState.unlockedModes[opt.k];
+                          return (
+                            <TouchableOpacity
+                              key={opt.k}
+                              onPress={() => {
+                                if (!ensureTypeAccess(opt.k)) return;
+                                updateQr({ type: opt.k });
+                                updateUnlock({ pendingQrType: null });
+                                updateUi({ qrTypePickerVisible: false });
+                              }}
+                              style={[
+                                styles.typeChip,
+                                {
+                                  backgroundColor: active
+                                    ? '#2563eb'
+                                    : dark
+                                    ? '#111827'
+                                    : '#f9fafb',
+                                  borderColor: active
+                                    ? '#2563eb'
+                                    : dark
+                                    ? '#1f2937'
+                                    : '#e2e8f0',
+                                  minWidth: '100%',
+                                  opacity: locked ? 0.7 : 1
+                                }
+                              ]}
+                              activeOpacity={0.9}
+                            >
+                              <View
+                                style={[
+                                  styles.typeIconWrap,
+                                  {
+                                    backgroundColor: dark
+                                      ? 'rgba(255,255,255,0.05)'
+                                      : 'rgba(0,0,0,0.04)',
+                                    borderColor: dark ? '#1f2937' : '#e5eaf1'
+                                  },
+                                  active ? styles.typeIconWrapActive : null
+                                ]}
+                              >
+                                <Ionicons
+                                  name={opt.icon}
+                                  size={18}
+                                  color={active ? '#fff' : dark ? '#c3dafe' : '#2563eb'}
+                                />
+                              </View>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.typeChipText,
+                                    {
+                                      color: active ? '#fff' : dark ? '#e5e7eb' : '#0b1220',
+                                      flex: 1
+                                    }
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {opt.label}
+                                </Text>
+                                {['wifi', 'tel', 'email', 'sms'].includes(opt.k) && !uiState.premium && !unlockState.unlockedModes[opt.k] && (
+                                  <Ionicons name="lock-closed" size={14} color={active ? '#fff' : '#f97316'} />
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                  </View>
+                </Modal>
+              </View>
+            ) : (
+              <View style={[styles.typeRow, { marginTop: 4 }]}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    updateUi({ barcodeFormatPickerVisible: true });
+                  }}
+                 style={[
+                  styles.typeChip,
+                  {
+                    backgroundColor: dark ? '#111827' : '#f7f9fb',
+                    borderColor: dark ? '#1f2937' : '#dbe2ea',
+                    minWidth: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }
+                ]}
+                  activeOpacity={0.9}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <View
+                      style={[
+                        styles.typeIconWrap,
+                        {
+                          backgroundColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                          borderColor: dark ? '#1f2937' : '#e5eaf1'
+                        }
+                      ]}
+                    >
+                      <Ionicons
+                        name="barcode-outline"
+                        size={18}
+                        color={dark ? '#c3dafe' : '#2563eb'}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.typeChipText,
+                        { color: dark ? '#8b98a5' : '#0b1220', flex: 1 }
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {(t(selectedBarcodeFormat.key) || selectedBarcodeFormat.fallback) +
+                        (selectedBarcodeFormat.fallbackDesc
+                          ? ' – ' +
+                            (selectedBarcodeFormat.descKey
+                              ? t(selectedBarcodeFormat.descKey) || selectedBarcodeFormat.fallbackDesc
+                              : selectedBarcodeFormat.fallbackDesc)
+                          : '')}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={uiState.barcodeFormatPickerVisible ? 'chevron-up-outline' : 'chevron-down-outline'}
+                    size={18}
+                    color={dark ? '#8b98a5' : '#64748b'}
+                  />
+                </TouchableOpacity>
+
+                <Modal
+                  visible={uiState.barcodeFormatPickerVisible}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => updateUi({ barcodeFormatPickerVisible: false })}
+                >
+                  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      activeOpacity={1}
+                      onPress={() => updateUi({ barcodeFormatPickerVisible: false })}
+                    />
+                    <View
+                      style={{
+                        backgroundColor: dark ? '#111827' : '#ffffff',
+                        paddingHorizontal: 16,
+                        paddingTop: 12,
+                        paddingBottom: 24,
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        borderWidth: 1,
+                        borderColor: dark ? '#1f2937' : '#e2e8f0'
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.customTitle,
+                            { color: dark ? '#e6edf3' : '#0b1220', fontSize: 16 }
+                          ]}
+                        >
+                          {t('barcode_type_label') || 'Barkod Tipi'}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => updateUi({ barcodeFormatPickerVisible: false })}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.85}
+                          style={[
+                            styles.modalCloseButton,
+                            {
+                              backgroundColor: dark ? '#111827' : '#f8fafc',
+                              borderColor: dark ? '#1f2937' : '#e2e8f0',
+                              shadowColor: dark ? '#000' : '#64748b',
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.2,
+                              shadowRadius: 4,
+                              elevation: 3
+                            }
+                          ]}
+                        >
+                          <Ionicons
+                            name="close"
+                            size={18}
+                            color={dark ? '#9ca3af' : '#64748b'}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView
+                        style={{ maxHeight: 320 }}
+                        contentContainerStyle={{ paddingTop: 4, paddingBottom: 4, gap: 8 }}
+                      >
+                        {BARCODE_FORMATS.map((opt) => {
+                          const active = qrSettings.barcodeFormat === opt.k;
+                          const label = t(opt.key) || opt.fallback;
+                          const desc = opt.descKey ? t(opt.descKey) || opt.fallbackDesc : opt.fallbackDesc;
+                          return (
+                            <TouchableOpacity
+                              key={opt.k}
+                              onPress={() => {
+                                updateQr({ barcodeFormat: opt.k });
+                                updateUi({
+                                  barcodeFormatPickerVisible: false,
+                                  matrix: null,
+                                  generatedContent: null,
+                                  error: null,
+                                });
+                              }}
+                              style={[
+                                styles.typeChip,
+                                {
+                                  backgroundColor: active
+                                    ? '#2563eb'
+                                    : dark
+                                    ? '#111827'
+                                    : '#f9fafb',
+                                  borderColor: active
+                                    ? '#2563eb'
+                                    : dark
+                                    ? '#1f2937'
+                                    : '#e2e8f0',
+                                  minWidth: '100%'
+                                }
+                              ]}
+                              activeOpacity={0.9}
+                            >
+                              <View
+                                style={[
+                                  styles.typeIconWrap,
+                                  {
+                                    backgroundColor: dark
+                                      ? 'rgba(255,255,255,0.05)'
+                                      : 'rgba(0,0,0,0.04)',
+                                    borderColor: dark ? '#1f2937' : '#e5eaf1'
+                                  },
+                                  active ? styles.typeIconWrapActive : null
+                                ]}
+                              >
+                                <Ionicons
+                                  name="barcode-outline"
+                                  size={18}
+                                  color={active ? '#fff' : dark ? '#c3dafe' : '#2563eb'}
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.typeChipText,
+                                    {
+                                      color: active ? '#fff' : dark ? '#e5e7eb' : '#0b1220'
+                                    }
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {label}
+                                </Text>
+                                {desc ? (
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      marginTop: 2,
+                                      color: active ? 'rgba(255,255,255,0.85)' : dark ? '#9ca3af' : '#6b7280'
+                                    }}
+                                    numberOfLines={2}
+                                  >
+                                    {desc}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </Modal>
+              </View>
+            )}
           </View>
           <View style={{ height: 10 }} />
+
+          {quickTemplatesVisible && (
+            <Animated.View
+              style={{
+                marginBottom: 8,
+                paddingHorizontal: 4,
+                opacity: quickTemplatesOpacity,
+                transform: [{ translateY: quickTemplatesTranslateY }],
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text
+                  style={[
+                    styles.customTitle,
+                    { color: dark ? '#e5e7eb' : '#111827', fontSize: 15 }
+                  ]}
+                >
+                  {t('quick_templates.title') || 'Hazır Şablonlar'}
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingVertical: 4, gap: 10 }}
+              >
+                {QUICK_LINK_TEMPLATES.map((tpl) => {
+                  const label = t(tpl.labelKey) || tpl.fallbackLabel;
+                  const desc = t(tpl.descKey) || tpl.fallbackDesc;
+                  const bgColor = dark ? tpl.bgDark : tpl.bgLight;
+                  const templateUnlocked = unlockState.unlockedTemplates && unlockState.unlockedTemplates[tpl.key];
+                  const locked = !uiState.premium && !templateUnlocked;
+                  const exampleKey = `quick_templates.${tpl.key}_example`;
+                  const localizedExample = t(exampleKey) || tpl.example;
+                  return (
+                      <TouchableOpacity
+                      key={tpl.key}
+                      onPress={() => {
+                        if (!uiState.premium && !templateUnlocked) {
+                          updateUnlock({ pendingTemplateKey: tpl.key, pendingCustomMode: 'logo_frame' });
+                          updateUi({ customGateVisible: true });
+                          return;
+                        }
+                        updateUi({ input: localizedExample, error: null });
+                        updateQr({
+                          customMode: 'logo_frame',
+                          customLogo: `fontisto:${tpl.icon}`,
+                          customFrameText: '',
+                          frameThemeColor: tpl.color,
+                          tempFrameColor: tpl.color,
+                          qrColor: tpl.color,
+                          tempQrColor: tpl.color
+                        });
+                      }}
+                      activeOpacity={0.9}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        borderRadius: 12,
+                        backgroundColor: bgColor,
+                        borderWidth: 1,
+                        borderColor: dark ? 'rgba(148,163,184,0.35)' : 'rgba(148,163,184,0.35)',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        minWidth: 210,
+                        maxWidth: 260,
+                        opacity: locked ? 0.65 : 1
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 10,
+                          backgroundColor: dark ? 'rgba(15,23,42,0.85)' : '#ffffff',
+                          borderWidth: 1,
+                          borderColor: dark ? 'rgba(148,163,184,0.6)' : 'rgba(148,163,184,0.5)'
+                        }}
+                      >
+                        <Fontisto name={tpl.icon} size={18} color={tpl.color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: '600',
+                            color: dark ? '#e5e7eb' : '#0b1220',
+                            marginBottom: 2
+                          }}
+                          numberOfLines={1}
+                        >
+                          {label}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: dark ? '#9ca3af' : '#4b5563'
+                          }}
+                          numberOfLines={2}
+                        >
+                          {desc}
+                        </Text>
+                      </View>
+                      {locked && (
+                        <View style={{ marginLeft: 8 }}>
+                          <Ionicons
+                            name="lock-closed"
+                            size={14}
+                            color={dark ? '#facc15' : '#f97316'}
+                          />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Animated.View>
+          )}
 
           {/* Inputs based on type */}
           {(qrSettings.type === 'url' || qrSettings.type === 'text') && (
             <View style={styles.inputWrapper}>
-              <TextInput
-                style={inputStyle}
-                placeholder={t('input_placeholder') || (qrSettings.type === 'url' ? 'URL girin...' : 'Metin girin...')}
-                placeholderTextColor={dark ? '#8b98a5' : '#7a8699'}
-                value={uiState.input}
-                onChangeText={(t) => updateUi({ input: t })}
-                autoCapitalize="none"
-                autoCorrect={false}
-                multiline
-                numberOfLines={1}
-                textAlignVertical="top"
-                scrollEnabled={false}
-                onContentSizeChange={(e) => updateUi({ inputHeight: Math.max(44, Math.min(e.nativeEvent.contentSize.height, 160)) })}
-              />
-              {uiState.input.length > 0 && (
-                <TouchableOpacity
-                  style={[styles.clearButton, { backgroundColor: dark ? '#172031' : '#f0f4f8', borderColor: dark ? '#243044' : '#dbe2ea' }]}
-                  onPress={() => updateUi({ input: '', matrix: null, error: null, inputHeight: 44 })}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              {qrSettings.symbolType === 'barcode' && !uiState.error && isNumericOnlyBarcodeFormat && (
+                <Text
+                  style={[
+                    styles.infoText,
+                    {
+                      marginBottom: 6,
+                      color: dark ? '#e5e7eb' : '#475569'
+                    }
+                  ]}
                 >
-                  <Ionicons name="close" size={18} color={dark ? '#8b98a5' : '#7a8699'} />
-                </TouchableOpacity>
+                  {barcodeLengthSpec && barcodeLengthSpec.exact
+                    ? (t('barcode.input.numericFixed', { length: barcodeLengthSpec.max }) ||
+                      `Bu barkod formatı için ${barcodeLengthSpec.max} haneli sayısal kod girin.`)
+                    : (t('barcode.input.numericOnly') || 'Bu barkod formatı için sadece rakam kullanın.')}
+                </Text>
+              )}
+              {uiState.error && (
+                <View style={[styles.errorContainer, { backgroundColor: dark ? '#2d1515' : '#fee' }]}>
+                  <Ionicons name="alert-circle" size={20} color={dark ? '#ff6b6b' : '#dc2626'} />
+                  <Text style={[styles.errorText, { color: dark ? '#ff6b6b' : '#dc2626' }]}>{uiState.error}</Text>
+                </View>
+              )}
+              <View style={styles.inputInner}>
+                <TextInput
+                  style={inputStyle}
+                  placeholder={
+                    qrSettings.symbolType === 'barcode'
+                      ? (barcodeLengthSpec && barcodeLengthSpec.exact
+                          ? (t('input_placeholder_barcode_fixed', { length: barcodeLengthSpec.max }) ||
+                             `${barcodeLengthSpec.max} haneli barkod kodu girin...`)
+                          : (t('input_placeholder_barcode') || 'Barkod verisini girin...'))
+                      : (t('input_placeholder') || (qrSettings.type === 'url' ? 'URL girin...' : 'Metin girin...'))
+                  }
+                  placeholderTextColor={dark ? '#8b98a5' : '#7a8699'}
+                  value={uiState.input}
+                  onChangeText={handleInputChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  numberOfLines={1}
+                  textAlignVertical="top"
+                  scrollEnabled={false}
+                  keyboardType={qrSettings.symbolType === 'barcode' && isNumericOnlyBarcodeFormat ? 'number-pad' : 'default'}
+                  maxLength={
+                    qrSettings.symbolType === 'barcode' && barcodeLengthSpec
+                      ? barcodeLengthSpec.max
+                      : qrSettings.symbolType === 'qr'
+                      ? QR_TEXT_MAX
+                      : undefined
+                  }
+                  onContentSizeChange={(e) => updateUi({ inputHeight: Math.max(44, Math.min(e.nativeEvent.contentSize.height, 160)) })}
+                />
+                {qrSettings.symbolType === 'barcode' && barcodeLengthSpec && (
+                  <View
+                    style={[
+                      styles.lengthIndicator,
+                      uiState.input.length === 0
+                        ? { right: 12 }
+                        : { right: 50 },
+                      {
+                        backgroundColor: isBarcodeLengthMaxed
+                          ? dark
+                            ? 'rgba(153,27,27,0.38)'
+                            : 'rgba(248,113,113,0.25)'
+                          : dark
+                          ? 'rgba(31,41,55,0.85)'
+                          : 'rgba(148,163,184,0.18)',
+                        borderColor: isBarcodeLengthMaxed
+                          ? dark
+                            ? '#fca5a5'
+                            : '#dc2626'
+                          : dark
+                          ? '#4b5563'
+                          : '#cbd5f5'
+                      }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.lengthIndicatorText,
+                        {
+                          color: isBarcodeLengthMaxed
+                            ? dark
+                              ? '#fecaca'
+                              : '#b91c1c'
+                            : dark
+                            ? '#e5e7eb'
+                            : '#475569'
+                        }
+                      ]}
+                    >
+                      {Math.min((uiState.input || '').trim().length, barcodeLengthSpec.max)}/{barcodeLengthSpec.max}
+                    </Text>
+                  </View>
+                )}
+                {qrSettings.symbolType === 'qr' && (
+                  <View
+                    style={[
+                      styles.lengthIndicator,
+                      uiState.input.length === 0
+                        ? { right: 12 }
+                        : { right: 50 },
+                      {
+                        backgroundColor: dark
+                          ? 'rgba(31,41,55,0.85)'
+                          : 'rgba(148,163,184,0.18)',
+                        borderColor: dark ? '#4b5563' : '#cbd5f5'
+                      }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.lengthIndicatorText,
+                        {
+                          color: dark ? '#e5e7eb' : '#475569'
+                        }
+                      ]}
+                    >
+                      {(uiState.input || '').trim().length}
+                    </Text>
+                  </View>
+                )}
+                {uiState.input.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.clearButton, { backgroundColor: dark ? '#1f2937' : '#f0f4f8', borderColor: dark ? '#1f2937' : '#dbe2ea' }]}
+                    onPress={() => updateUi({ input: '', matrix: null, error: null, inputHeight: 44 })}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="close" size={18} color={dark ? '#8b98a5' : '#7a8699'} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              {qrSettings.symbolType === 'barcode' && (
+                <View style={{ marginTop: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!isModeUnlocked('qr_color')) {
+                        updateUnlock({ pendingCustomMode: 'qr_color' });
+                        updateUi({ customGateVisible: true });
+                        return;
+                      }
+                      updateQr({ tempQrColor: qrSettings.qrColor });
+                      updateUi({ colorPickerVisible: true, colorPickerTarget: 'barcode' });
+                    }}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.customModeChip,
+                      {
+                        backgroundColor: dark ? '#111827' : '#f8fafc',
+                        borderColor: dark ? '#1f2937' : '#e2e8f0',
+                        alignSelf: 'stretch',
+                        minWidth: '100%',
+                        justifyContent: 'center',
+                      },
+                      !isModeUnlocked('qr_color') ? { opacity: 0.65 } : null,
+                    ]}
+                  >
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                      <View
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 10,
+                          backgroundColor: qrSettings.qrColor,
+                          borderWidth: 1,
+                          borderColor: dark ? '#374151' : '#cbd5f5',
+                        }}
+                      />
+                      <Text style={[styles.customModeText, { color: dark ? '#cbd5f5' : '#0f172a' }]}>
+                        {t('custom_qr_dot_color') || 'Nokta Rengi'}
+                      </Text>
+                      {!isModeUnlocked('qr_color') && (
+                        <Ionicons name="lock-closed" size={14} color="#f97316" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           )}
@@ -604,11 +1850,11 @@ export default function CreateQrScreen() {
           {qrSettings.type === 'wifi' && (
             <View style={{ gap: 10 }}>
               <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('wifi.ssid') || 'SSID'}</Text>
-              <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={wifiConfig.ssid} onChangeText={(t) => updateWifi({ ssid: t })} autoCapitalize="none" autoCorrect={false} />
+              <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={wifiConfig.ssid} onChangeText={(t) => updateWifi({ ssid: t })} autoCapitalize="none" autoCorrect={false} />
               <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('wifi.security') || 'Güvenlik'}</Text>
               <View style={styles.segmented}>
                 {[{ k: 'WPA', label: 'WPA/WPA2' }, { k: 'WEP', label: 'WEP' }, { k: 'nopass', label: 'Yok' }].map(opt => (
-                  <TouchableOpacity key={opt.k} onPress={() => updateWifi({ security: opt.k })} style={[styles.segBtn, { borderColor: dark ? '#243044' : '#dbe2ea', backgroundColor: dark ? '#172031' : '#f0f4f8' }, wifiConfig.security === opt.k ? styles.segBtnActive : null]}>
+                  <TouchableOpacity key={opt.k} onPress={() => updateWifi({ security: opt.k })} style={[styles.segBtn, { borderColor: dark ? '#1f2937' : '#dbe2ea', backgroundColor: dark ? '#1f2937' : '#f0f4f8' }, wifiConfig.security === opt.k ? styles.segBtnActive : null]}>
                     <Text style={[styles.segText, { color: dark ? '#8b98a5' : '#0b1220' }, wifiConfig.security === opt.k ? { color: '#fff' } : null]}>{opt.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -616,11 +1862,11 @@ export default function CreateQrScreen() {
               {wifiConfig.security !== 'nopass' && (
                 <>
                   <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('wifi.password') || 'Şifre'}</Text>
-                  <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={wifiConfig.password} onChangeText={(t) => updateWifi({ password: t })} autoCapitalize="none" autoCorrect={false} secureTextEntry />
+                  <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={wifiConfig.password} onChangeText={(t) => updateWifi({ password: t })} autoCapitalize="none" autoCorrect={false} secureTextEntry />
                 </>
               )}
               <View style={styles.toggleRow}>
-                <TouchableOpacity onPress={() => updateWifi({ hidden: !wifiConfig.hidden })} style={[styles.typeChip, { backgroundColor: dark ? '#172031' : '#f0f4f8', borderColor: dark ? '#243044' : '#dbe2ea' }, wifiConfig.hidden ? styles.typeChipActive : null]}>
+                <TouchableOpacity onPress={() => updateWifi({ hidden: !wifiConfig.hidden })} style={[styles.typeChip, { backgroundColor: dark ? '#1f2937' : '#f0f4f8', borderColor: dark ? '#1f2937' : '#dbe2ea' }, wifiConfig.hidden ? styles.typeChipActive : null]}>
                   <Text style={[styles.typeChipText, { color: dark ? '#8b98a5' : '#0b1220' }, wifiConfig.hidden ? { color: '#fff' } : null]}>{t('wifi.hiddenNetwork') || 'Gizli Ağ'}</Text>
                 </TouchableOpacity>
               </View>
@@ -630,32 +1876,33 @@ export default function CreateQrScreen() {
           {qrSettings.type === 'tel' && (
             <View style={{ gap: 10 }}>
               <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('tel.number') || 'Telefon Numarası'}</Text>
-              <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={contactInfo.phone} onChangeText={(t) => updateContact({ phone: t })} keyboardType="phone-pad" />
+              <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={contactInfo.phone} onChangeText={(t) => updateContact({ phone: t })} keyboardType="phone-pad" />
             </View>
           )}
 
           {qrSettings.type === 'email' && (
              <View style={{ gap: 10 }}>
                <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('email.address') || 'E‑posta Adresi'}</Text>
-               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={contactInfo.email} onChangeText={(t) => updateContact({ email: t })} keyboardType="email-address" autoCapitalize="none" />
+               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={contactInfo.email} onChangeText={(t) => updateContact({ email: t })} keyboardType="email-address" autoCapitalize="none" />
                <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('email.subject') || 'Konu'}</Text>
-               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={contactInfo.subject} onChangeText={(t) => updateContact({ subject: t })} />
+               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={contactInfo.subject} onChangeText={(t) => updateContact({ subject: t })} />
                <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('email.body') || 'İçerik'}</Text>
-               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea', minHeight: 80, paddingVertical: 10 }]} value={contactInfo.body} onChangeText={(t) => updateContact({ body: t })} multiline numberOfLines={3} />
+               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea', minHeight: 80, paddingVertical: 10 }]} value={contactInfo.body} onChangeText={(t) => updateContact({ body: t })} multiline numberOfLines={3} />
              </View>
           )}
 
           {qrSettings.type === 'sms' && (
              <View style={{ gap: 10 }}>
                <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('sms.number') || 'Telefon Numarası'}</Text>
-               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea' }]} value={contactInfo.smsNumber} onChangeText={(t) => updateContact({ smsNumber: t })} keyboardType="phone-pad" />
+               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea' }]} value={contactInfo.smsNumber} onChangeText={(t) => updateContact({ smsNumber: t })} keyboardType="phone-pad" />
                <Text style={[styles.fieldLabel, { color: dark ? '#b1bac4' : '#4a5568' }]}>{t('sms.body') || 'Mesaj'}</Text>
-               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#0d1523' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1b2330' : '#dde3ea', minHeight: 80, paddingVertical: 10 }]} value={contactInfo.smsBody} onChangeText={(t) => updateContact({ smsBody: t })} multiline numberOfLines={3} />
+               <TextInput style={[styles.fieldInput, { backgroundColor: dark ? '#111827' : '#ffffff', color: dark ? '#e6edf3' : '#0b1220', borderColor: dark ? '#1f2937' : '#dde3ea', minHeight: 80, paddingVertical: 10 }]} value={contactInfo.smsBody} onChangeText={(t) => updateContact({ smsBody: t })} multiline numberOfLines={3} />
              </View>
           )}
 
           {/* Customization */}
-          <View style={[styles.customSection, { backgroundColor: dark ? '#0d1523' : '#ffffff', borderColor: dark ? '#1f2937' : '#dbe2ea' }]}>
+          {qrSettings.symbolType === 'qr' && (
+          <View style={[styles.customSection, { backgroundColor: dark ? '#111827' : '#ffffff', borderColor: dark ? '#1f2937' : '#dbe2ea' }]}>
             <View style={styles.customHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.customTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('custom_qr_title') || 'Özel QR Stilleri'}</Text>
@@ -726,11 +1973,22 @@ export default function CreateQrScreen() {
               <View style={[styles.logoCard, { borderColor: dark ? '#1f2937' : '#dbe2ea', backgroundColor: dark ? '#0d1523' : '#ffffff' }]}>
                 <View style={styles.logoPreview}>
                   {qrSettings.customLogo ? (
-                    <Image source={{ uri: qrSettings.customLogo }} style={styles.logoImage} resizeMode="cover" />
+                    isIconLogo && iconLogoInfo ? (
+                      <View style={[styles.logoImage, { alignItems: 'center', justifyContent: 'center', backgroundColor:'#ffffff' }]}>
+                        <IconRenderer
+                          family={iconLogoInfo.family}
+                          name={iconLogoInfo.name}
+                          size={40}
+                          color={qrSettings.frameThemeColor || qrSettings.qrColor || '#22c55e'}
+                        />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: qrSettings.customLogo }} style={styles.logoImage} resizeMode="cover" />
+                    )
                   ) : (
-                    <View style={[styles.logoPlaceholder, { borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
-                      <Ionicons name="image-outline" size={26} color={dark ? '#94a3b8' : '#94a3b8'} />
-                      <Text style={{ color: dark ? '#94a3b8' : '#475569', fontSize: 12, marginTop: 4 }}>{t('custom_qr_logo_hint') || 'Galeriden logo seçin'}</Text>
+                    <View style={[styles.logoPlaceholder, { borderColor: '#e2e8f0' }]}>
+                      <Ionicons name="image-outline" size={26} color="#94a3b8" />
+                      <Text style={{ color: '#475569', fontSize: 12, marginTop: 4 }}>{t('custom_qr_logo_hint') || 'Galeriden logo seçin'}</Text>
                     </View>
                   )}
                 </View>
@@ -738,10 +1996,14 @@ export default function CreateQrScreen() {
                   <TouchableOpacity style={[styles.logoActionBtn, { backgroundColor: '#2563eb' }]} onPress={pickCustomLogo} disabled={uiState.logoBusy}>
                     {uiState.logoBusy ? <ActivityIndicator color="#fff" size="small" /> : <><Ionicons name="cloud-upload-outline" size={18} color="#fff" /><Text style={styles.logoActionText}>{qrSettings.customLogo ? (t('custom_qr_change_logo') || 'Logoyu değiştir') : (t('custom_qr_add_logo') || 'Logo ekle')}</Text></>}
                   </TouchableOpacity>
+                  <TouchableOpacity style={[styles.logoActionBtnSecondary, { borderColor: '#cbd5f5' }]} onPress={() => updateUi({ iconPickerVisible: true })}>
+                    <Ionicons name="sparkles-outline" size={18} color="#2563eb" />
+                    <Text style={[styles.logoActionTextSecondary, { color: '#2563eb' }]}>{t('custom_qr_choose_icon') || 'Hazır ikon seç'}</Text>
+                  </TouchableOpacity>
                   {qrSettings.customLogo && (
-                    <TouchableOpacity style={[styles.logoActionBtnSecondary, { borderColor: dark ? '#374151' : '#cbd5f5' }]} onPress={() => updateQr({ customLogo: null })}>
-                      <Ionicons name="trash-outline" size={18} color={dark ? '#f87171' : '#dc2626'} />
-                      <Text style={[styles.logoActionTextSecondary, { color: dark ? '#f87171' : '#dc2626' }]}>{t('custom_qr_remove_logo') || 'Logoyu kaldır'}</Text>
+                    <TouchableOpacity style={[styles.logoActionBtnSecondary, { borderColor: '#cbd5f5' }]} onPress={() => updateQr({ customLogo: null })}>
+                      <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                      <Text style={[styles.logoActionTextSecondary, { color: '#dc2626' }]}>{t('custom_qr_remove_logo') || 'Logoyu kaldır'}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -749,10 +2011,10 @@ export default function CreateQrScreen() {
             )}
 
             {showFrameControls && (
-              <View style={[styles.frameCard, { borderColor: dark ? '#1f2937' : '#dbe2ea', backgroundColor: dark ? '#0d1523' : '#ffffff' }]}>
+              <View style={[styles.frameCard, { borderColor: dark ? '#1f2937' : '#dbe2ea', backgroundColor: dark ? '#111827' : '#ffffff' }]}>
                 <Text style={[styles.frameLabelTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('custom_qr_frame_text') || 'Çerçeve Yazısı'}</Text>
                 <TextInput
-                  style={[styles.frameInput, { backgroundColor: dark ? '#0b1220' : '#fff', borderColor: dark ? '#1f2937' : '#d1d5db', color: dark ? '#e6edf3' : '#0b1220' }]}
+                  style={[styles.frameInput, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#d1d5db', color: dark ? '#e6edf3' : '#0b1220' }]}
                   placeholder={t('custom_qr_frame_placeholder') || 'SCAN ME'}
                   placeholderTextColor={dark ? '#4b5563' : '#94a3b8'}
                   value={qrSettings.customFrameText}
@@ -767,22 +2029,22 @@ export default function CreateQrScreen() {
               <Text style={[styles.customHint, { color: dark ? '#94a3b8' : '#475569' }]}>{t('custom_qr_locked_hint') || 'Premium üye olun ya da bu seçenek için ödüllü reklam izleyin.'}</Text>
             )}
           </View>
+          )}
 
-          <Text style={[styles.charCount, compact ? { fontSize: 11 } : null, { color: dark ? '#8b98a5' : '#7a8699' }]}>{payloadLength} {t('characters') || 'karakter'}</Text>
           <View style={[styles.generateRow, compact ? { marginTop: 8 } : null]}>
             <TouchableOpacity style={[styles.generateBtn, !canGenerate() ? { opacity: 0.7 } : null]} onPress={onGenerate} disabled={uiState.generating} activeOpacity={0.85}>
-              <Ionicons name="flash-outline" size={20} color="#fff" />
-              <Text style={styles.generateText}>{t('actions.generate') || 'QR Oluştur'}</Text>
+              <Ionicons name={qrSettings.symbolType === 'barcode' ? 'barcode-outline' : 'flash-outline'} size={20} color="#fff" />
+              <Text style={styles.generateText}>
+                {qrSettings.symbolType === 'barcode'
+                  ? (t('actions.generate_barcode') || 'Barkod Oluştur')
+                  : (t('actions.generate') || 'Kod Oluştur')}
+              </Text>
+              {qrSettings.symbolType === 'barcode' && isBarcodeGenerateLocked && (
+                <Ionicons name="lock-closed" size={18} color="#facc15" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
-
-        {uiState.error && (
-          <View style={[styles.errorContainer, { backgroundColor: dark ? '#2d1515' : '#fee' }]}>
-            <Ionicons name="alert-circle" size={20} color={dark ? '#ff6b6b' : '#dc2626'} />
-            <Text style={[styles.errorText, { color: dark ? '#ff6b6b' : '#dc2626' }]}>{uiState.error}</Text>
-          </View>
-        )}
 
         {uiState.generating && (
           <View style={[styles.loadingContainer, compact ? { paddingVertical: 24 } : null]}>
@@ -791,117 +2053,67 @@ export default function CreateQrScreen() {
           </View>
         )}
 
-        {uiState.matrix && !uiState.generating && (
-          <View style={[styles.qrSection, compact ? { gap: 12, marginVertical: 12 } : null]}>
-            <ViewShot ref={qrRef} options={{ format: 'png', quality: 1 }}>
-              <View style={[styles.qrContainer, { backgroundColor: showFrameControls ? qrSettings.frameThemeColor : '#ffffff' }]}>
-                <View style={[styles.qrPreview, showFrameControls ? styles.qrPreviewFramed : null]}>
-                  <View style={[styles.qrWrap, { width: qrSize, height: qrSize }, showFrameControls ? styles.qrWrapElevated : null]}>
-                    <QRCode
-                      value={uiState.generatedContent || ' '}
-                      size={qrSize}
-                      color={qrSettings.qrColor}
-                      backgroundColor="white"
-                      ecl="H"
-                    />
-                    {showLogoControls && qrSettings.customLogo && (
-                      <View style={[styles.logoOverlay, { 
-                        width: logoOverlaySize, 
-                        height: logoOverlaySize, 
-                        marginLeft: -logoOverlaySize / 2, 
-                        marginTop: -logoOverlaySize / 2,
-                        borderRadius: logoOverlaySize * 0.23
-                      }]}>
-                        <Image source={{ uri: qrSettings.customLogo }} style={styles.logoOverlayImage} />
-                      </View>
-                    )}
-                  </View>
-                  {showFrameControls && (
-                    <View style={[styles.frameLabelBlock, { backgroundColor: qrSettings.frameThemeColor, borderColor: qrSettings.frameThemeColor.toLowerCase() === '#ffffff' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.9)' }]}>
-                      <Text style={[styles.frameLabelText, { color: qrSettings.frameThemeColor.toLowerCase() === '#ffffff' ? '#0b1220' : '#fff' }]}>{frameLabelText}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </ViewShot>
-            <View style={[styles.actionButtons, compact ? { gap: 8 } : null]}>
-              <TouchableOpacity style={[styles.actionButton, compact ? { paddingVertical: 10 } : null, { backgroundColor: dark ? '#1b2330' : '#fff' }]} onPress={onDownload}>
-                <Ionicons name="download-outline" size={20} color={dark ? '#4a9eff' : '#0066cc'} />
-                <Text style={[styles.actionButtonText, compact ? { fontSize: 14 } : null, { color: dark ? '#4a9eff' : '#0066cc' }]}>{t('download') || 'İndir'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, compact ? { paddingVertical: 10 } : null, { backgroundColor: dark ? '#1b2330' : '#fff' }]} onPress={onShare}>
-                <Ionicons name="share-outline" size={20} color={dark ? '#4a9eff' : '#0066cc'} />
-                <Text style={[styles.actionButtonText, compact ? { fontSize: 14 } : null, { color: dark ? '#4a9eff' : '#0066cc' }]}>{t('share') || 'Paylaş'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {!uiState.matrix && !uiState.generating && !uiState.error && (
-          <View style={[styles.placeholder, { backgroundColor: dark ? '#0d1523' : '#ffffff', borderColor: dark ? '#1b2330' : '#dde3ea' }, compact ? { padding: 24 } : null]}>
-            <View style={[styles.placeholderIcon, { backgroundColor: dark ? '#1b2330' : '#f0f4f8' }]}>
-              <Ionicons name="qr-code-outline" size={compact ? 52 : 64} color={dark ? '#4a5568' : '#94a3b8'} />
-            </View>
-            <Text style={[styles.placeholderTitle, compact ? { fontSize: 16 } : null, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('placeholder_title') || 'QR Kod Oluşturun'}</Text>
-            <Text style={[styles.placeholderText, { color: dark ? '#8b98a5' : '#7a8699' }]}>{t('placeholder_text') || 'Yukarıdaki alana metin veya URL girin, QR kodunuz otomatik olarak oluşturulacak'}</Text>
-          </View>
-        )}
-
-
+        <QrPreviewSection
+          uiState={uiState}
+          compact={compact}
+          qrRef={qrRef}
+          showVisualFrame={showVisualFrame}
+          qrSettings={qrSettings}
+          qrSize={qrSize}
+          showLogoControls={showLogoControls}
+          showFrameControls={showFrameControls}
+          logoOverlaySize={logoOverlaySize}
+          isIconLogo={isIconLogo}
+          iconLogoInfo={iconLogoInfo}
+          hasFrameText={hasFrameText}
+          frameLabelText={frameLabelText}
+          onDownload={onDownload}
+          onShare={onShare}
+          t={t}
+          dark={dark}
+        />
 
       </ScrollView>
 
-      <Toast visible={uiState.toast.visible} message={uiState.toast.message} type={uiState.toast.type} dark={dark} onHide={() => updateUi({ toast: { ...uiState.toast, visible: false } })} style={{ bottom: Math.max(insets.bottom + 32, 32) }} />
+      <Toast
+        visible={uiState.toast.visible}
+        message={uiState.toast.message}
+        type={uiState.toast.type}
+        dark={dark}
+        onHide={() =>
+          updateUi({ toast: { ...uiState.toast, visible: false } })
+        }
+        style={{ bottom: Math.max(insets.bottom + 32, 32) }}
+      />
 
-      {/* Color Picker Modal */}
-      <Modal visible={uiState.colorPickerVisible} transparent animationType="fade" onRequestClose={() => updateUi({ colorPickerVisible: false })}>
-        <GestureHandlerRootView style={styles.colorModalOverlay}>
-          <View style={[styles.colorModalCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
-            <Text style={[styles.colorModalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-              {uiState.colorPickerTarget === 'qr' ? (t('custom_qr_dot_color') || 'Nokta Rengi') : (t('custom_qr_color_pick') || 'Tema rengi seç')}
-            </Text>
-            
-            <View style={{ height: 260, width: '100%', marginVertical: 10 }}>
-              <ColorPicker 
-                style={{ flex: 1 }} 
-                value={uiState.colorPickerTarget === 'qr' ? qrSettings.tempQrColor : qrSettings.tempFrameColor} 
-                onComplete={({ hex }) => {
-                  'worklet';
-                  runOnJS(onColorChange)(hex);
-                }}
-              >
-                <Preview 
-                  hideInitialColor 
-                  textStyle={{ color: dark ? '#fff' : '#000', fontSize: 16, fontWeight: 'bold' }} 
-                />
-                <Panel1 style={{ marginTop: 12, borderRadius: 12 }} />
-                <HueSlider style={{ marginTop: 12, borderRadius: 12, height: 30 }} />
-              </ColorPicker>
-            </View>
+      <IconPickerModal
+        dark={dark}
+        t={t}
+        uiState={uiState}
+        unlockState={unlockState}
+        updateUi={updateUi}
+        previewFrameColor={previewFrameColor}
+        previewQrColor={previewQrColor}
+        previewIcon={previewIcon}
+        handleIconSelect={handleIconSelect}
+        ICON_CATEGORIES={ICON_CATEGORIES}
+        ICON_LIBRARY={ICON_LIBRARY}
+      />
 
-            <View style={styles.colorModalActions}>
-              <TouchableOpacity style={[styles.colorBtn, { backgroundColor: dark ? '#1f2937' : '#e5e7eb' }]} onPress={() => updateUi({ colorPickerVisible: false })} activeOpacity={0.85}>
-                <Text style={[styles.colorBtnText, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('common.cancel') || 'İptal'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.colorBtn, { backgroundColor: '#2563eb' }]} onPress={() => { 
-                if (uiState.colorPickerTarget === 'qr') {
-                  updateQr({ qrColor: qrSettings.tempQrColor });
-                } else {
-                  updateQr({ frameThemeColor: qrSettings.tempFrameColor });
-                }
-                updateUi({ colorPickerVisible: false }); 
-              }} activeOpacity={0.9}>
-                <Text style={[styles.colorBtnText, { color: '#fff' }]}>{t('common.select') || 'Seç'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </GestureHandlerRootView>
-      </Modal>
+      <ColorPickerModal
+        dark={dark}
+        t={t}
+        uiState={uiState}
+        qrSettings={qrSettings}
+        updateUi={updateUi}
+        updateQr={updateQr}
+        onColorChange={onColorChange}
+      />
 
       {/* Unlock Success Modal */}
       <Modal visible={uiState.unlockModalVisible} animationType="fade" transparent onRequestClose={closeCustomGate}>
         <View style={styles.rewardOverlay}>
-          <View style={[styles.rewardCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+          <View style={[styles.rewardCard, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <Ionicons name="checkmark-circle" size={22} color={dark ? '#22c55e' : '#15803d'} />
               <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{t('reward.unlocked_title') || 'Kilit açıldı'}</Text>
@@ -917,7 +2129,7 @@ export default function CreateQrScreen() {
       {/* Missing Info Modal */}
       <Modal visible={!!uiState.missingInfoType} animationType="fade" transparent onRequestClose={() => updateUi({ missingInfoType: null })}>
         <View style={styles.rewardOverlay}>
-          <View style={[styles.rewardCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+          <View style={[styles.rewardCard, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <Ionicons name="alert-circle" size={22} color={dark ? '#facc15' : '#d97706'} />
               <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{t('missing_info.title') || 'Eksik bilgi'}</Text>
@@ -933,7 +2145,7 @@ export default function CreateQrScreen() {
       {/* Ad Info/Error Modal */}
       <Modal visible={uiState.adInfoModal.visible} animationType="fade" transparent onRequestClose={() => updateUi({ adInfoModal: { ...uiState.adInfoModal, visible: false } })}>
         <View style={styles.rewardOverlay}>
-          <View style={[styles.rewardCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+          <View style={[styles.rewardCard, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <Ionicons name="alert-circle" size={22} color={dark ? '#facc15' : '#d97706'} />
               <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{uiState.adInfoModal.title}</Text>
@@ -949,11 +2161,34 @@ export default function CreateQrScreen() {
       {/* Custom Feature Gate Modal */}
       <Modal visible={uiState.customGateVisible} animationType="fade" transparent onRequestClose={closeCustomGate}>
         <View style={styles.rewardOverlay}>
-          <View style={[styles.rewardCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
-            <TouchableOpacity onPress={closeCustomGate} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} style={{ position: 'absolute', top: 10, right: 10, padding: 4 }} activeOpacity={0.8}>
-              <Ionicons name="close-circle" size={22} color={dark ? '#94a3b8' : '#94a3b8'} />
+          <View style={[styles.rewardCard, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+            <TouchableOpacity
+              onPress={closeCustomGate}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                width: 32,
+                height: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 999,
+                backgroundColor: dark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.98)',
+                borderWidth: 1,
+                borderColor: dark ? '#1f2937' : '#e5e7eb',
+                shadowColor: '#000',
+                shadowOpacity: 0.14,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 5,
+                zIndex: 20
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close" size={18} color={dark ? '#e5e7eb' : '#4b5563'} />
             </TouchableOpacity>
-            <View style={styles.rewardHeader}>
+            <View style={[styles.rewardHeader, { marginTop: 6 }]}>
               <Ionicons name="sparkles" size={22} color={dark ? '#facc15' : '#f59e0b'} />
               <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{gateTitle}</Text>
             </View>
@@ -996,8 +2231,6 @@ export default function CreateQrScreen() {
         type={uiState.statusModal.type}
         onClose={() => updateUi({ statusModal: { ...uiState.statusModal, visible: false } })}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
-

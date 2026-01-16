@@ -1,10 +1,9 @@
 import { getUsomInfo } from '../utils/usomHelper';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Share, ScrollView, useWindowDimensions, Animated, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Share, ScrollView, useWindowDimensions, Animated, Modal, ActivityIndicator, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
-import * as MediaLibrary from 'expo-media-library';
 import BarcodeScanning from '@react-native-ml-kit/barcode-scanning';
 import { Ionicons } from '@expo/vector-icons';
 import { classifyInput } from '../utils/classifier';
@@ -18,7 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../components/Toast';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
@@ -53,6 +52,30 @@ export default function ImageScanScreen() {
   const [inversionTask, setInversionTask] = useState(null);
   const hasHandledSharedImage = useRef(false);
   const lastHandledSharedImageUri = useRef(null);
+
+  // Cleanup helper to delete temporary files
+  const cleanupTempFiles = async () => {
+    try {
+      const cacheDir = FileSystem.cacheDirectory;
+      const files = await FileSystem.readDirectoryAsync(cacheDir);
+      
+      const deletions = files
+        .filter(f => f.startsWith('ImageManipulator') || f.startsWith('image_scan_tmp'))
+        .map(f => FileSystem.deleteAsync(cacheDir + f, { idempotent: true }));
+      
+      await Promise.all(deletions);
+      if (__DEV__) console.log('[ImageScanScreen] Cleaned up temp files:', deletions.length);
+    } catch (e) {
+      console.log('[ImageScanScreen] Cleanup failed', e);
+    }
+  };
+
+  // Run cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      cleanupTempFiles();
+    };
+  }, []);
 
   const saveHistory = async (item) => {
     try {
@@ -170,13 +193,57 @@ export default function ImageScanScreen() {
         let localUri = uri;
         try {
           const info = await FileSystem.getInfoAsync(uri);
-          if (!info?.exists || !String(uri).startsWith('file://')) {
+          // Strict check: if file doesn't exist, stop immediately to avoid native crash
+          if (!info?.exists) {
+            console.log('[ImageScanScreen] File does not exist:', uri);
+            setResult(null);
+            setError(t('errors.imagePickFailed') || 'Görüntü dosyası bulunamadı.');
+            setPreparing(false);
+            return;
+          }
+
+          if (!String(uri).startsWith('file://')) {
             const ext = '.jpg';
             const tmp = FileSystem.cacheDirectory + 'image_scan_tmp' + ext;
             await FileSystem.copyAsync({ from: uri, to: tmp });
             localUri = tmp;
           }
-        } catch {}
+
+          // CRITICAL FIX: Resize huge images to prevent native crash (SIGABRT) on iPad/High-res devices
+          // MLKit/Vision can crash if passed an extremely large bitmap
+          try {
+            const meta = await ImageManipulator.manipulateAsync(
+              localUri,
+              [], 
+              { format: ImageManipulator.SaveFormat.PNG }
+            );
+            
+            const MAX_DIM = 2500;
+            if (meta.width > MAX_DIM || meta.height > MAX_DIM) {
+               console.log('[ImageScanScreen] Image too large, resizing...', meta.width, meta.height);
+               const resizeAction = meta.width > meta.height 
+                 ? { width: 2000 } 
+                 : { height: 2000 };
+                 
+               const resized = await ImageManipulator.manipulateAsync(
+                  localUri,
+                  [{ resize: resizeAction }],
+                  { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+               );
+               localUri = resized.uri;
+            }
+          } catch (resizeErr) {
+            console.log('[ImageScanScreen] Resize check failed', resizeErr);
+            // Continue with original uri if resize fails, but risk is higher
+          }
+
+        } catch (e) {
+           console.log('[ImageScanScreen] File preparation failed', e);
+           setResult(null);
+           setError(t('errors.imagePickFailed'));
+           setPreparing(false);
+           return;
+        }
 
         // Optimization: Try scanning the original image first without any heavy processing
         let variants = [];
@@ -207,6 +274,10 @@ export default function ImageScanScreen() {
             console.log('[ImageScanScreen Native] Variant scan failed', scanErr?.message || scanErr);
           }
         }
+
+        // Cleanup temp files after scan is complete (whether successful or not)
+        cleanupTempFiles();
+
         if (first) {
           const data = first?.value || first?.rawValue || first?.displayValue;
           if (data) {
@@ -337,10 +408,14 @@ export default function ImageScanScreen() {
 
   const pickImage = async () => {
     try {
+      // Android 13+ (API 33) uses Photo Picker which doesn't need explicit permission
       const androidVer = Platform.OS === 'android' ? Platform.Version : null;
-      const usePhotoPicker = Platform.OS === 'android' && typeof androidVer === 'number' && androidVer >= 33;
+      const isAndroid13OrHigher = Platform.OS === 'android' && typeof androidVer === 'number' && androidVer >= 33;
+      
+      // iOS 14+ uses PHPicker which doesn't need explicit permission for picking
+      const isIOS = Platform.OS === 'ios';
 
-      if (usePhotoPicker) {
+      if (isAndroid13OrHigher || isIOS) {
         await startImageSelection();
         return;
       }

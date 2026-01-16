@@ -21,7 +21,7 @@ import Toast from '../components/Toast';
 import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import OfflineNotice from '../components/OfflineNotice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

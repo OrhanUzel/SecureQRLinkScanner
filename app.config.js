@@ -9,7 +9,7 @@ module.exports = {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
     owner: "orhanuzl",
-    version: "1.5.1",
+    version: "1.6.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -42,22 +42,26 @@ module.exports = {
       tr: {
         NSCameraUsageDescription: tr.permissions?.camera,
         NSUserTrackingUsageDescription: tr.permissions?.tracking,
-        NSPhotoLibraryUsageDescription: tr.permissions?.photoLibrary
+        NSPhotoLibraryUsageDescription: tr.permissions?.photoLibrary,
+        NSPhotoLibraryAddUsageDescription: tr.permissions?.photoLibraryAdd
       },
       en: {
         NSCameraUsageDescription: en.permissions?.camera,
         NSUserTrackingUsageDescription: en.permissions?.tracking,
-        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary
+        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary,
+        NSPhotoLibraryAddUsageDescription: en.permissions?.photoLibraryAdd
       },
       es: {
         NSCameraUsageDescription: es.permissions?.camera,
         NSUserTrackingUsageDescription: es.permissions?.tracking,
-        NSPhotoLibraryUsageDescription: es.permissions?.photoLibrary
+        NSPhotoLibraryUsageDescription: es.permissions?.photoLibrary,
+        NSPhotoLibraryAddUsageDescription: es.permissions?.photoLibraryAdd
       },
       ar: {
         NSCameraUsageDescription: ar.permissions?.camera,
         NSUserTrackingUsageDescription: ar.permissions?.tracking,
-        NSPhotoLibraryUsageDescription: ar.permissions?.photoLibrary
+        NSPhotoLibraryUsageDescription: ar.permissions?.photoLibrary,
+        NSPhotoLibraryAddUsageDescription: ar.permissions?.photoLibraryAdd
       }
     },
     ios: {
@@ -69,11 +73,12 @@ module.exports = {
         // Fallback to English if locale-specific strings fail
         NSCameraUsageDescription: en.permissions?.camera,
         NSUserTrackingUsageDescription: en.permissions?.tracking,
-        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary
+        NSPhotoLibraryUsageDescription: en.permissions?.photoLibrary,
+        NSPhotoLibraryAddUsageDescription: en.permissions?.photoLibraryAdd
       }
     },
     android: {
-      versionCode: 16,
+      versionCode: 17,
       adaptiveIcon: {
         foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"

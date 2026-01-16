@@ -66,9 +66,12 @@ function RootNavigator() {
 
     let isMounted = true;
 
-    const initTracking = async () => {
+    const initialize = async () => {
+      // 1. Initialize Tracking (iOS ATT)
+      // We do this first to ensure subsequent ad requests respect the user's choice
       try {
         if (Platform.OS === 'ios') {
+          // Wait a bit to ensure app is fully active (sometimes needed for prompt)
           await new Promise(resolve => setTimeout(resolve, 1000));
           const { status } = await requestTrackingPermissionsAsync();
           console.log('[App] Tracking permission status:', status);
@@ -76,9 +79,10 @@ function RootNavigator() {
       } catch (e) {
         console.log('Tracking permission failed:', e?.message || e);
       }
-    };
 
-    const initMobileAds = async () => {
+      // 2. Initialize Mobile Ads SDK
+      // The SDK initialization itself doesn't show ads, but prepares the environment.
+      // Actual ad requests (in components/hooks) will now check the ATT status we just requested.
       try {
         if (!isMounted) return;
         const mod = await import('react-native-google-mobile-ads');
@@ -89,8 +93,7 @@ function RootNavigator() {
       }
     };
 
-    initTracking();
-    initMobileAds();
+    initialize();
 
     return () => { isMounted = false; };
   }, []);
