@@ -6,6 +6,7 @@ import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
@@ -24,6 +25,39 @@ import OfflineNotice from '../components/OfflineNotice';
 // Bileşen unmount olsa bile (başka ekrana gidip gelince) hafızada kalması için global tanımladık.
 let globalInitialUrlHandled = false;
 
+function toValidatedWebUrl(raw) {
+  const input = String(raw || '').trim();
+  if (!input) return { isValid: false, normalized: '' };
+
+  const candidate = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+
+  try {
+    const u = new URL(candidate);
+    if (!['http:', 'https:'].includes(u.protocol)) return { isValid: false, normalized: '' };
+
+    const host = (u.hostname || '').toLowerCase();
+    if (!host) return { isValid: false, normalized: '' };
+
+    const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(host) && host.split('.').every(p => {
+      const n = Number(p);
+      return Number.isFinite(n) && n >= 0 && n <= 255;
+    });
+
+    if (!isIPv4) {
+      if (!host.includes('.')) return { isValid: false, normalized: '' };
+      const labels = host.split('.').filter(Boolean);
+      const tld = labels[labels.length - 1] || '';
+      if (!tld.startsWith('xn--') && !/^[a-z]{2,24}$/.test(tld)) return { isValid: false, normalized: '' };
+      if (labels.some(l => l.length > 63)) return { isValid: false, normalized: '' };
+      if (labels.some(l => !/^[a-z0-9-]+$/.test(l) || l.startsWith('-') || l.endsWith('-'))) return { isValid: false, normalized: '' };
+    }
+
+    return { isValid: true, normalized: u.toString() };
+  } catch {
+    return { isValid: false, normalized: '' };
+  }
+}
+
 export default function LinkScanScreen() {
   const { t, i18n } = useTranslation();
   const { feedbackVisible, closeFeedback, registerLinkOpen, markFeedbackGiven } = useFeedbackSystem();
@@ -40,13 +74,34 @@ export default function LinkScanScreen() {
   const [pendingUrl, setPendingUrl] = useState(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState('success');
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
+  const insets = useSafeAreaInsets();
   
   const hasHandledSharedLink = useRef(false);
   const lastHandledSharedUrl = useRef(null);
   const isShareSession = useRef(false); // sadece paylaşım menüsünden gelinen senaryoda otomatik tara
+  const lastInvalidToastValue = useRef(null);
   
   // handledInitialUrl ref'i kaldırıldı, yerine yukarıdaki global değişken kullanılacak.
+
+  const showInvalidUrlToast = () => {
+    setToastType('error');
+    setToastMsg(t('scan.link.invalidUrlToast') || 'Tarama yapmak için geçerli bir web sitesi adresi girin.');
+    setToastVisible(true);
+  };
+
+  const inputUrl = React.useMemo(() => toValidatedWebUrl(input), [input]);
+
+  const maybeShowInvalidUrlToast = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return;
+    const v = toValidatedWebUrl(raw);
+    if (v.isValid) return;
+    if (lastInvalidToastValue.current === raw) return;
+    lastInvalidToastValue.current = raw;
+    showInvalidUrlToast();
+  };
 
   const handleSharedUrl = (sharedUrl) => {
     if (!sharedUrl) return false;
@@ -137,13 +192,17 @@ export default function LinkScanScreen() {
  
 
   const onAnalyzeWithUrl = async (urlToAnalyze) => {
-    if (!urlToAnalyze || !urlToAnalyze.trim()) return;
+    const v = toValidatedWebUrl(urlToAnalyze);
+    if (!v.isValid) {
+      showInvalidUrlToast();
+      return;
+    }
     Keyboard.dismiss();
     
     setLoading(true);
     let finalResult = null;
     try {
-      const res = classifyInput(urlToAnalyze.trim());
+      const res = classifyInput(v.normalized.trim());
 
       // Uzaktan risk kontrolü (yalnızca URL ise)
       let updated = res;
@@ -201,7 +260,10 @@ export default function LinkScanScreen() {
   };
 
  const onAnalyze = async () => {
-  if (!input.trim()) return;
+  if (!inputUrl.isValid) {
+    showInvalidUrlToast();
+    return;
+  }
   Keyboard.dismiss();
   
   setLoading(true);
@@ -209,7 +271,7 @@ export default function LinkScanScreen() {
   try {
     // Blacklist yükleme devre dışı (isteğe bağlı):
     // await loadBlacklist();
-    const res = classifyInput(input.trim());
+    const res = classifyInput(inputUrl.normalized.trim());
 
     // Uzaktan risk kontrolü (yalnızca URL ise)
     let updated = res;
@@ -244,7 +306,7 @@ export default function LinkScanScreen() {
     setResult(updated);
   } catch (error) {
     console.error('Analysis failed:', error);
-    const res = classifyInput(input.trim());
+    const res = classifyInput(inputUrl.normalized.trim());
     finalResult = res;
     setResult(res);
   } finally {
@@ -332,6 +394,44 @@ export default function LinkScanScreen() {
     }
   };
 
+  const retryRemoteCheck = async () => {
+    if (!result?.normalized || !result.isUrl) return;
+    try {
+      setLoading(true);
+      const base = classifyInput(result.normalized.trim());
+      let updated = base;
+      if (base.isUrl) {
+        try {
+          const remote = await checkRisk(base.normalized);
+          if (remote?.error) {
+            setOffline(true);
+          } else {
+            setOffline(false);
+          }
+          if (remote?.isRisky) {
+            const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || base.normalized);
+            const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+            const files = remote?.foundInFiles || [];
+            const reasons = [ ...(base.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+            if (files.includes('usom')) {
+              reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
+            } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
+              reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+            }
+            updated = { ...base, level: 'unsafe', reasons };
+          }
+        } catch {
+          setOffline(true);
+        }
+      }
+      setResult(updated);
+    } catch {
+      setOffline(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderLoadingStates = () => {
     if (!loading) return null;
     return (
@@ -353,13 +453,27 @@ export default function LinkScanScreen() {
     );
   };
 
+  let riskIconName = 'shield-checkmark';
+  let riskColor = '#2f9e44';
+  let riskBgColor = dark ? 'rgba(34,197,94,0.18)' : 'rgba(34,197,94,0.08)';
+  if (result?.level === 'suspicious') {
+    riskIconName = 'warning';
+    riskColor = '#ffb703';
+    riskBgColor = dark ? 'rgba(234,179,8,0.22)' : 'rgba(234,179,8,0.08)';
+  } else if (result?.level === 'unsafe') {
+    riskIconName = 'shield';
+    riskColor = '#d00000';
+    riskBgColor = dark ? 'rgba(220,38,38,0.24)' : 'rgba(239,68,68,0.08)';
+  }
+
   return (
     <View style={[styles.page, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}> 
     <OfflineNotice
       visible={offline}
       dark={dark}
-      message={t('alerts.offline')}
+      message={t('alerts.remoteRiskUnavailable')}
       onHeightChange={setOfflineNoticeHeight}
+      onRetry={result?.isUrl ? retryRemoteCheck : undefined}
     />
     <ScrollView style={[styles.container, { padding: compact ? 12 : 20 }]}
       contentContainerStyle={{ gap: 12, paddingBottom: 120, paddingTop: offline ? offlineNoticeHeight + 8 : 0 }}
@@ -373,6 +487,14 @@ export default function LinkScanScreen() {
           placeholderTextColor={dark ? '#8b98a5' : '#7a8699'}
           value={input}
           onChangeText={setInput}
+          onBlur={() => maybeShowInvalidUrlToast(input)}
+          onSubmitEditing={() => {
+            if (inputUrl.isValid) {
+              onAnalyze();
+            } else {
+              showInvalidUrlToast();
+            }
+          }}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -388,9 +510,9 @@ export default function LinkScanScreen() {
       </View>
 
       <TouchableOpacity 
-        style={[styles.button, compact ? { paddingVertical: 12 } : null, !input.trim() && styles.buttonDisabled]} 
+        style={[styles.button, compact ? { paddingVertical: 12 } : null, (!inputUrl.isValid || loading) && styles.buttonDisabled]} 
         onPress={onAnalyze}
-        disabled={!input.trim()}
+        disabled={!inputUrl.isValid || loading}
         activeOpacity={0.8}
       >
         <Ionicons name="shield-checkmark" size={20} color="#fff" />
@@ -401,9 +523,19 @@ export default function LinkScanScreen() {
 
       {result && (
         <View style={[styles.card, compact ? { padding: 12 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 
-          <View style={styles.badgeRow}>
+          <View style={[styles.badgeRow, { borderColor: riskColor, backgroundColor: riskBgColor }]}>
+            <Ionicons 
+              name={riskIconName} 
+              size={compact ? 38 : 44} 
+              color={riskColor} 
+            />
             <RiskBadge level={result.level} />
           </View>
+          {result.isUrl && offline && (
+            <Text style={[styles.reasonText, { marginTop: 8, marginBottom: 4, color: dark ? '#9ca3af' : '#4b5563' }]}>
+              {t('result.localAnalysisOnly')}
+            </Text>
+          )}
           <View style={[styles.linkBox, { borderColor: dark ? '#1b2330' : '#d0d8e0', backgroundColor: dark ? '#0d121a' : '#f8fafc' }]}>
             <View style={styles.linkRow}>
               <Text style={[styles.linkLabel, { color: dark ? '#8b98a5' : '#6b7280' }]}>URL:</Text>
@@ -533,13 +665,15 @@ export default function LinkScanScreen() {
         }}
         onCancel={() => { setConfirmVisible(false); setPendingUrl(null); }}
       />
-      <Toast 
-        visible={toastVisible}
-        message={toastMsg}
-        onHide={() => setToastVisible(false)}
-        dark={dark}
-      />
     </ScrollView>
+    <Toast 
+      visible={toastVisible}
+      message={toastMsg}
+      type={toastType}
+      onHide={() => setToastVisible(false)}
+      dark={dark}
+      style={{ position: 'absolute', bottom: Math.max(insets.bottom + 20, 24), left: 20, right: 20 }}
+    />
     {renderLoadingStates()}
 
     </View>
@@ -695,7 +829,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginRight: 6
   },
-  badgeRow: { flexDirection: 'row', justifyContent: 'center' },
+  badgeRow: { 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 4,
+    gap: 10
+  },
   badge: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
   badgeGradient: {},
   badgeText: { color: '#fff', fontWeight: '700', fontSize: 16 },

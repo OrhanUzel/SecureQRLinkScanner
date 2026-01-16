@@ -91,97 +91,96 @@ export default function ImageScanScreen() {
       await AsyncStorage.setItem('scan_history', JSON.stringify(arr.slice(0, 50)));
     } catch {}
   };
+
+  const getImageSizeAsync = (uri) =>
+    new Promise((resolve) => {
+      if (!uri) return resolve(null);
+      Image.getSize(
+        uri,
+        (width, height) => resolve({ width, height }),
+        () => resolve(null)
+      );
+    });
+
   const scanImageForCodes = async (uri) => {
     setPreparing(true);
     setLoading(false);
-    const prepareVariantsForScan = async (rawUri) => {
-      // Generate multiple resized + rotated PNG variants to help ML Kit pick up codes with heavy frames/logos
-      const targets = [1080, 1400, 1600, 2000];
-      const rotations = [0, 90, 180, 270];
-      const variants = [];
-      let meta = null;
-      try {
-        meta = await ImageManipulator.manipulateAsync(
-          rawUri,
-          [],
-          { compress: 1, format: ImageManipulator.SaveFormat.PNG }
-        );
-      } catch (e) {
-        console.log('[ImageScanScreen Native] Meta read failed', e?.message || e);
-      }
+    const prepareBaseForScan = async (rawUri) => {
+      const maxDim = Platform.OS === 'ios' ? 1600 : 2200;
+      const size = await getImageSizeAsync(rawUri);
+      const resizeAction =
+        size?.width && size?.height
+          ? size.width >= size.height
+            ? { width: Math.min(maxDim, size.width) }
+            : { height: Math.min(maxDim, size.height) }
+          : { width: maxDim };
 
-      // Invert color variants (for dark QR codes on dark backgrounds or light on light)
       try {
-        // Resize first to reasonable size for SVG rendering to avoid memory issues and speed up
-        const resizedForInvert = await ImageManipulator.manipulateAsync(
+        const base = await ImageManipulator.manipulateAsync(
           rawUri,
-          [{ resize: { width: 800 } }], 
-          { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+          [{ resize: resizeAction }],
+          {
+            compress: Platform.OS === 'ios' ? 0.9 : 1,
+            format: ImageManipulator.SaveFormat.JPEG,
+          }
         );
-        
-        if (resizedForInvert?.uri) {
-           // Trigger the React state to render the ImageInverter component
-           const invertedUri = await new Promise((resolve) => {
-             setInversionTask({ 
-               uri: resizedForInvert.uri, 
-               width: resizedForInvert.width || 800, 
-               height: resizedForInvert.height || 800, 
-               resolve 
-             });
-           });
-           
-           if (invertedUri) {
-             variants.push(invertedUri);
-           }
+        if (base?.uri) {
+          return { uri: base.uri, width: base.width, height: base.height };
         }
       } catch (e) {
-        console.log('[ImageScanScreen Native] Inversion failed', e);
+        console.log('[ImageScanScreen Native] Base prepare failed', e?.message || e);
       }
 
-      // Center crops to reduce influence of thick frames
-      if (meta?.width && meta?.height) {
-        const minDim = Math.min(meta.width, meta.height);
-        const cropScales = [0.92, 0.86, 0.8];
+      if (Platform.OS === 'ios') return null;
+      return { uri: rawUri, width: size?.width || null, height: size?.height || null };
+    };
+
+    const prepareDeepVariantsForScan = async (base) => {
+      const variants = [];
+      if (!base?.uri) return variants;
+
+      if (base?.width && base?.height) {
+        const minDim = Math.min(base.width, base.height);
+        const cropScales = [0.92, 0.86];
         for (const scale of cropScales) {
-          const size = Math.floor(minDim * scale);
-          const originX = Math.max(0, Math.floor((meta.width - size) / 2));
-          const originY = Math.max(0, Math.floor((meta.height - size) / 2));
+          const cropSize = Math.floor(minDim * scale);
+          const originX = Math.max(0, Math.floor((base.width - cropSize) / 2));
+          const originY = Math.max(0, Math.floor((base.height - cropSize) / 2));
           try {
             const crop = await ImageManipulator.manipulateAsync(
-              rawUri,
-              [{ crop: { originX, originY, width: size, height: size } }],
-              { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+              base.uri,
+              [{ crop: { originX, originY, width: cropSize, height: cropSize } }],
+              { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG }
             );
-            if (crop?.uri) {
-              variants.push(crop.uri);
-            }
+            if (crop?.uri) variants.push(crop.uri);
           } catch (e) {
             console.log('[ImageScanScreen Native] Crop failed', scale, e?.message || e);
           }
         }
       }
 
-      for (const width of targets) {
-        for (const rotate of rotations) {
-          try {
-            const res = await ImageManipulator.manipulateAsync(
-              rawUri,
-              [
-                { resize: { width } },
-                ...(rotate ? [{ rotate }] : []),
-              ],
-              { compress: 1, format: ImageManipulator.SaveFormat.PNG }
-            );
-            if (res?.uri) {
-              variants.push(res.uri);
-            }
-          } catch (e) {
-            console.log('[ImageScanScreen Native] Variant prepare failed', width, rotate, e?.message || e);
-          }
+      try {
+        const resizedForInvert = await ImageManipulator.manipulateAsync(
+          base.uri,
+          [{ resize: { width: 900 } }],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+        );
+
+        if (resizedForInvert?.uri) {
+          const invertedUri = await new Promise((resolve) => {
+            setInversionTask({
+              uri: resizedForInvert.uri,
+              width: resizedForInvert.width || 900,
+              height: resizedForInvert.height || 900,
+              resolve,
+            });
+          });
+          if (invertedUri) variants.push(invertedUri);
         }
+      } catch (e) {
+        console.log('[ImageScanScreen Native] Inversion failed', e);
       }
-      // Always include original as last resort
-      variants.push(rawUri);
+
       return variants;
     };
 
@@ -209,34 +208,6 @@ export default function ImageScanScreen() {
             localUri = tmp;
           }
 
-          // CRITICAL FIX: Resize huge images to prevent native crash (SIGABRT) on iPad/High-res devices
-          // MLKit/Vision can crash if passed an extremely large bitmap
-          try {
-            const meta = await ImageManipulator.manipulateAsync(
-              localUri,
-              [], 
-              { format: ImageManipulator.SaveFormat.PNG }
-            );
-            
-            const MAX_DIM = 2500;
-            if (meta.width > MAX_DIM || meta.height > MAX_DIM) {
-               console.log('[ImageScanScreen] Image too large, resizing...', meta.width, meta.height);
-               const resizeAction = meta.width > meta.height 
-                 ? { width: 2000 } 
-                 : { height: 2000 };
-                 
-               const resized = await ImageManipulator.manipulateAsync(
-                  localUri,
-                  [{ resize: resizeAction }],
-                  { compress: 1, format: ImageManipulator.SaveFormat.PNG }
-               );
-               localUri = resized.uri;
-            }
-          } catch (resizeErr) {
-            console.log('[ImageScanScreen] Resize check failed', resizeErr);
-            // Continue with original uri if resize fails, but risk is higher
-          }
-
         } catch (e) {
            console.log('[ImageScanScreen] File preparation failed', e);
            setResult(null);
@@ -245,26 +216,40 @@ export default function ImageScanScreen() {
            return;
         }
 
-        // Optimization: Try scanning the original image first without any heavy processing
+        const base = await prepareBaseForScan(localUri);
+        if (!base?.uri) {
+          cleanupTempFiles();
+          setPreparing(false);
+          setResult(null);
+          setError(t('errors.imagePickFailed') || (t('scan.noCodeFound') || 'Bu görselde kod bulunamadı'));
+          return;
+        }
+
         let variants = [];
         let quickFound = false;
         try {
-           const quickAttempt = await BarcodeScanning.scan(localUri);
-           if (quickAttempt && quickAttempt.length > 0) {
-             variants = [localUri];
-             quickFound = true;
-           }
+          const quickAttempt = await BarcodeScanning.scan(base.uri);
+          if (quickAttempt && quickAttempt.length > 0) {
+            variants = [base.uri];
+            quickFound = true;
+          }
         } catch (e) {
            console.log('[ImageScanScreen Native] Quick scan failed, proceeding to deep scan', e);
         }
 
         if (!quickFound) {
-           variants = await prepareVariantsForScan(localUri);
+          const deep = await prepareDeepVariantsForScan(base);
+          variants = [base.uri, ...deep];
+          if (Platform.OS !== 'ios' && localUri !== base.uri) {
+            variants.push(localUri);
+          }
         }
 
         let first = null;
         for (const candidate of variants) {
           try {
+            const info = await FileSystem.getInfoAsync(candidate);
+            if (!info?.exists) continue;
             const attempt = await BarcodeScanning.scan(candidate);
             if (attempt && attempt.length > 0) {
               first = attempt[0];
@@ -387,6 +372,44 @@ export default function ImageScanScreen() {
       setError(t('errors.imagePickFailed') || (t('scan.noCodeFound') || 'Bu görselde kod bulunamadı'));
     } finally {
       setPreparing(false);
+    }
+  };
+
+  const retryRemoteCheck = async () => {
+    if (!result?.normalized || !result.isUrl) return;
+    try {
+      setLoading(true);
+      const base = classifyInput(result.normalized.trim());
+      let updated = base;
+      if (base.isUrl) {
+        try {
+          const remote = await checkRisk(base.normalized);
+          if (remote?.error) {
+            setOffline(true);
+          } else {
+            setOffline(false);
+          }
+          if (remote?.isRisky) {
+            const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || base.normalized);
+            const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+            const files = remote?.foundInFiles || [];
+            const reasons = [ ...(base.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+            if (files.includes('usom')) {
+              reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
+            } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
+              reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+            }
+            updated = { ...base, level: 'unsafe', reasons };
+          }
+        } catch {
+          setOffline(true);
+        }
+      }
+      setResult(updated);
+    } catch {
+      setOffline(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -557,13 +580,27 @@ export default function ImageScanScreen() {
     (result.normalized && /^\d+$/.test(result.normalized) && [8, 12, 13].includes(result.normalized.length))
   );
 
+  let riskIconName = 'shield-checkmark';
+  let riskColor = '#2f9e44';
+  let riskBgColor = dark ? 'rgba(34,197,94,0.18)' : 'rgba(34,197,94,0.08)';
+  if (result?.level === 'suspicious') {
+    riskIconName = 'warning';
+    riskColor = '#ffb703';
+    riskBgColor = dark ? 'rgba(234,179,8,0.22)' : 'rgba(234,179,8,0.08)';
+  } else if (result?.level === 'unsafe') {
+    riskIconName = 'shield';
+    riskColor = '#d00000';
+    riskBgColor = dark ? 'rgba(220,38,38,0.24)' : 'rgba(239,68,68,0.08)';
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: dark ? '#0b0f14' : '#e9edf3' }}>
     <OfflineNotice
       visible={offline}
       dark={dark}
-      message={t('alerts.offline')}
+      message={t('alerts.remoteRiskUnavailable')}
       onHeightChange={setOfflineNoticeHeight}
+      onRetry={result?.isUrl ? retryRemoteCheck : undefined}
     />
     <ScrollView 
       style={[styles.container, { padding: compact ? 12 : 20 }]}
@@ -634,7 +671,23 @@ export default function ImageScanScreen() {
       {result && (
         <>
           <View style={[styles.card, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea', alignItems: 'center' }]}> 
-            <View style={{
+            
+            {!(isBarcode || gs1Country) || result.type === 'wifi' ? (
+              <View style={[styles.badgeRow, { borderColor: riskColor, backgroundColor: riskBgColor }]}>
+                <Ionicons 
+                  name={riskIconName} 
+                  size={compact ? 38 : 44} 
+                  color={riskColor} 
+                />
+                <RiskBadge level={result.level} />
+              </View>
+            ) : null}
+            {result.isUrl && offline && (
+              <Text style={{ marginTop: 8, marginBottom: 4, fontSize: 13, color: dark ? '#9ca3af' : '#4b5563', textAlign: 'center' }}>
+                {t('result.localAnalysisOnly')}
+              </Text>
+            )}
+<View style={{
               backgroundColor: dark ? 'rgba(56, 139, 253, 0.1)' : '#f0f9ff',
               paddingHorizontal: 16,
               paddingVertical: 6,
@@ -669,7 +722,7 @@ export default function ImageScanScreen() {
               <Text style={[styles.linkText, { color: dark ? '#9ecaff' : '#0b1220', textAlign: 'center' }]} selectable>{result.normalized}</Text>
             </View>
             {/* Show Barcode UI if isBarcode is true OR if gs1Country is present */ }
-            {(isBarcode || gs1Country) && result.type !== 'wifi' ? (
+            {(isBarcode || gs1Country) && result.type !== 'wifi' && (
               <View style={{alignItems: 'center', gap: 4, marginTop: 8}}>
                 <View style={[styles.badge, { backgroundColor: dark ? '#1f6feb' : '#0969da' }]}> 
                   <Ionicons name="scan-outline" size={16} color="#fff" />
@@ -679,8 +732,6 @@ export default function ImageScanScreen() {
                   {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
                 </Text>
               </View>
-            ) : (
-              <RiskBadge level={result.level} />
             )}
             {(isBarcode || gs1Country) && result.type !== 'wifi' && (
               <View style={[styles.resultSection, styles.countrySection, { alignItems: 'center', width: '100%' }]}>
@@ -819,7 +870,7 @@ export default function ImageScanScreen() {
                   label: t('actions.copy') || 'Kopyala',
                   icon: 'copy-outline',
                   onPress: async () => { try { await Clipboard.setStringAsync(result.normalized); setToastMsg(t('toast.copied')); setToastVisible(true); } catch {} },
-                  color: '#334155',
+                  color: '#4089eeff',
                 },
                 result?.type === 'wifi' && result?.wifi?.password && result?.wifi?.security !== 'nopass' && {
                   key: 'copy_wifi',
@@ -840,7 +891,7 @@ export default function ImageScanScreen() {
                   label: t('actions.share') || 'Paylaş',
                   icon: 'share-outline',
                   onPress: async () => { try { await Share.share({ message: result.normalized }); } catch {} },
-                  color: '#6c5ce7',
+                  color: '#e75cceff',
                 },
                 result.isUrl && {
                   key: 'vt',
@@ -979,6 +1030,18 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 14, fontWeight: '600' },
   sectionLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   detailText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  badgeRow: { 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 4,
+    gap: 10,
+    alignSelf: 'stretch'
+  },
   badge: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
   badgeGradient: { },
   badgeText: { color: '#fff', fontWeight: '700', fontSize: 15 },

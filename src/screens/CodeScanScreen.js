@@ -167,23 +167,27 @@ export default function CodeScanScreen({ navigation }) {
 
       // Uzaktan risk kontrolü (yalnızca URL ise)
       if (res.isUrl) {
-        const remote = await checkRisk(res.normalized);
-        if (remote?.error) {
-          setOffline(true);
-        } else {
-          setOffline(false);
-        }
-        if (remote?.isRisky) {
-          const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
-          const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
-          const files = remote?.foundInFiles || [];
-          const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
-          if (files.includes('usom')) {
-            reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
-          } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
-            reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+        try {
+          const remote = await checkRisk(res.normalized);
+          if (remote?.error) {
+            setOffline(true);
+          } else {
+            setOffline(false);
           }
-          updated = { ...res, level: 'unsafe', reasons };
+          if (remote?.isRisky) {
+            const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || res.normalized);
+            const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+            const files = remote?.foundInFiles || [];
+            const reasons = [ ...(res.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+            if (files.includes('usom')) {
+              reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
+            } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
+              reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+            }
+            updated = { ...res, level: 'unsafe', reasons };
+          }
+        } catch {
+          setOffline(true);
         }
       }
       if (usomBad) {
@@ -241,6 +245,44 @@ export default function CodeScanScreen({ navigation }) {
   const shareText = async () => {
     if (!result?.normalized) return;
     try { await Share.share({ message: result.normalized }); } catch {}
+  };
+
+  const retryRemoteCheck = async () => {
+    if (!result?.normalized || !result.isUrl) return;
+    try {
+      setLoading(true);
+      const base = classifyInput(result.normalized.trim());
+      let updated = base;
+      if (base.isUrl) {
+        try {
+          const remote = await checkRisk(base.normalized);
+          if (remote?.error) {
+            setOffline(true);
+          } else {
+            setOffline(false);
+          }
+          if (remote?.isRisky) {
+            const domainInfo = t('remoteRisk.checkedDomainLabel') + ' ' + (remote?.checkedDomain || base.normalized);
+            const sources = t('remoteRisk.sourcesLabel') + ' ' + ((remote?.foundInFiles || []).join(', ') || '-');
+            const files = remote?.foundInFiles || [];
+            const reasons = [ ...(base.reasons || []), 'remoteRisk.defaultMessage', domainInfo, sources ];
+            if (files.includes('usom')) {
+              reasons.push({ type: 'usom', data: remote?.usomDetails || {} });
+            } else if (files.includes('aa') || files.includes('ab') || files.includes('ac')) {
+              reasons.push({ type: 'github', repo: 'romainmarcoux/malicious-domains', url: 'https://github.com/romainmarcoux/malicious-domains/tree/main' });
+            }
+            updated = { ...base, level: 'unsafe', reasons };
+          }
+        } catch {
+          setOffline(true);
+        }
+      }
+      setResult(updated);
+    } catch {
+      setOffline(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const shareContentAsFile = async (filename, mime, content) => {
@@ -315,13 +357,27 @@ export default function CodeScanScreen({ navigation }) {
     (result.normalized && /^\d+$/.test(result.normalized) && [8, 12, 13].includes(result.normalized.length))
   );
 
+  let riskIconName = 'shield-checkmark';
+  let riskColor = '#2f9e44';
+  let riskBgColor = dark ? 'rgba(34,197,94,0.18)' : 'rgba(34,197,94,0.08)';
+  if (result?.level === 'suspicious') {
+    riskIconName = 'warning';
+    riskColor = '#ffb703';
+    riskBgColor = dark ? 'rgba(234,179,8,0.22)' : 'rgba(234,179,8,0.08)';
+  } else if (result?.level === 'unsafe') {
+    riskIconName = 'shield';
+    riskColor = '#d00000';
+    riskBgColor = dark ? 'rgba(220,38,38,0.24)' : 'rgba(239,68,68,0.08)';
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}>
       <OfflineNotice
         visible={offline}
         dark={dark}
-        message={t('alerts.offline')}
+        message={t('alerts.remoteRiskUnavailable')}
         onHeightChange={setOfflineNoticeHeight}
+        onRetry={result?.isUrl ? retryRemoteCheck : undefined}
       />
       <View style={{ flex: 1, paddingTop: offline ? offlineNoticeHeight + 8 : 0 }}>
       {loading && (
@@ -385,54 +441,88 @@ export default function CodeScanScreen({ navigation }) {
         >
           <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ paddingBottom: 24 }, compact ? { paddingHorizontal: 12 } : { paddingHorizontal: 20 }]}>
           <View style={[styles.resultHeader, compact ? { marginBottom: 16, gap: 12 } : null]}>
-            {(isBarcode || gs1Country) && result.type !== 'wifi' ? (
-              <>
-                <Ionicons 
-                  name="barcode-outline" 
-                  size={compact ? 40 : 48} 
-                  color={dark ? '#e6edf3' : '#0b1220'} 
-                />
-                <View style={{alignItems: 'center', gap: 4}}>
-                  <View style={[styles.badge, { backgroundColor: dark ? '#1f6feb' : '#0969da' }]}> 
-                    <Ionicons name="scan-outline" size={16} color="#fff" />
-                    <Text style={styles.badgeText}>{t('scan.barcodeDetected') || 'Barkod Tespit Edildi'}</Text>
-                  </View>
-                  <Text style={{ fontSize: 12, color: dark ? '#8b98a5' : '#5c6a7a', textAlign: 'center', maxWidth: 250 }}>
-                    {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
-                  </Text>
+          {(isBarcode || gs1Country) && result.type !== 'wifi' && (
+            <>
+              <Ionicons 
+                name="barcode-outline" 
+                size={compact ? 40 : 48} 
+                color={dark ? '#e6edf3' : '#0b1220'} 
+              />
+              <View style={{alignItems: 'center', gap: 4}}>
+                <View style={[styles.badge, { backgroundColor: dark ? '#1f6feb' : '#0969da' }]}> 
+                  <Ionicons name="scan-outline" size={16} color="#fff" />
+                  <Text style={styles.badgeText}>{t('scan.barcodeDetected') || 'Barkod Tespit Edildi'}</Text>
                 </View>
-              </>
-            ) : (
-              <>
-                <Ionicons 
-                  name={result.level === 'secure' ? 'shield-checkmark' : result.level === 'suspicious' ? 'warning' : 'shield'} 
-                  size={compact ? 40 : 48} 
-                  color={result.level === 'secure' ? '#2f9e44' : result.level === 'suspicious' ? '#ffb703' : '#d00000'} 
-                />
-                <RiskBadge level={result.level} />
-              </>
-            )}
-          </View>
+                <Text style={{ fontSize: 12, color: dark ? '#8b98a5' : '#5c6a7a', textAlign: 'center', maxWidth: 250 }}>
+                  {t('scan.barcodeSafeDesc') || 'Barkodlar herhangi bir bağlantı içermediği için güvenlidir.'}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
 
           <View style={[styles.resultCard, compact ? { padding: 14, gap: 14 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#e5e9f0' }]}> 
-            <View style={[styles.resultSection, { alignItems: 'center' }]}>
-              <Text style={[styles.sectionLabel, { color: dark ? '#8b98a5' : '#5c6a7a' }]}
-              >
-                {result.isUrl ? (t('label.url') || 'URL') : (
-                  (isBarcode || gs1Country) ? (t('scan.barcodeDetected') || 'Barkod') :
-                  result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
-                  result.type === 'tel' ? (t('label.phone') || 'Telefon') :
-                  result.type === 'email' ? (t('label.email') || 'E‑posta') :
-                  result.type === 'sms' ? (t('label.sms') || 'SMS') :
-                  result.type === 'geo' ? (t('label.location') || 'Konum') :
-                  result.type === 'vcard' ? (t('label.contact') || 'Kişi') :
-                  result.type === 'event' ? (t('label.event') || 'Etkinlik') :
-                  (t('label.content') || 'İçerik')
-                )}
+            {!( (isBarcode || gs1Country) && result.type !== 'wifi' ) && (
+              <View style={[styles.badgeRow, { borderColor: riskColor, backgroundColor: riskBgColor }]}>
+                <Ionicons 
+                  name={riskIconName} 
+                  size={compact ? 38 : 44} 
+                  color={riskColor} 
+                />
+                <RiskBadge level={result.level} />
+              </View>
+            )}
+            {result.isUrl && offline && (
+              <Text style={[styles.reasonText, { marginTop: 8, marginBottom: 4, color: dark ? '#9ca3af' : '#4b5563' }]}>
+                {t('result.localAnalysisOnly')}
               </Text>
-              <Text style={[styles.linkText, compact ? { fontSize: 14, lineHeight: 22 } : null, { color: dark ? '#9ecaff' : '#0066cc', textAlign: 'center' }]} numberOfLines={3} selectable>
-                {result.normalized}
-              </Text>
+            )}
+            <View style={[styles.resultSection, { alignItems: 'center', width: '100%' }]}>
+              <View style={{
+                backgroundColor: dark ? 'rgba(56, 139, 253, 0.1)' : '#f0f9ff',
+                paddingHorizontal: 16,
+                paddingVertical: 6,
+                borderRadius: 20,
+                marginBottom: 4,
+                borderWidth: 1,
+                borderColor: dark ? 'rgba(56, 139, 253, 0.3)' : '#bae6ff',
+              }}>
+                <Text style={[styles.sectionLabel, { color: dark ? '#58a6ff' : '#0969da', marginBottom: 0, fontSize: 14, fontWeight: '700' }]}>
+                  {result.isUrl ? (t('label.url') || 'URL') : (
+                    (isBarcode || gs1Country) ? (t('scan.barcodeDetected') || 'Barkod') :
+                    result.type === 'wifi' ? (t('label.wifi') || 'Wi‑Fi') :
+                    result.type === 'tel' ? (t('label.phone') || 'Telefon') :
+                    result.type === 'email' ? (t('label.email') || 'E‑posta') :
+                    result.type === 'sms' ? (t('label.sms') || 'SMS') :
+                    result.type === 'geo' ? (t('label.location') || 'Konum') :
+                    result.type === 'vcard' ? (t('label.contact') || 'Kişi') :
+                    result.type === 'event' ? (t('label.event') || 'Etkinlik') :
+                    (t('label.content') || 'İçerik')
+                  )}
+                </Text>
+              </View>
+              <View style={{
+                borderWidth: 1,
+                borderColor: dark ? '#30363d' : '#d0d7de',
+                borderRadius: 8,
+                padding: 12,
+                backgroundColor: dark ? '#161b22' : '#f6f8fa',
+                width: '100%',
+                marginTop: 8,
+                marginBottom: 8
+              }}>
+                <Text
+                  style={[
+                    styles.linkText,
+                    compact ? { fontSize: 14, lineHeight: 22 } : null,
+                    { color: dark ? '#9ecaff' : '#0b1220', textAlign: 'center' }
+                  ]}
+                  numberOfLines={3}
+                  selectable
+                >
+                  {result.normalized}
+                </Text>
+              </View>
             </View>
 
             {(isBarcode || gs1Country) && result.type !== 'wifi' && (
@@ -911,6 +1001,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     gap: 16,
+  },
+  badgeRow: { 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 4,
+    gap: 10
   },
   resultCard: { 
     padding: 15, 

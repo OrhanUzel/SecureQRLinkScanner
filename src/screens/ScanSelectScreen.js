@@ -98,6 +98,15 @@ export default function ScanSelectScreen({ navigation }) {
 
   const keyExtractor = useCallback((item) => item.id, []);
 
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        require('./CreateQrScreen');
+      } catch {}
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
   return (
     <View 
       style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3' }]}

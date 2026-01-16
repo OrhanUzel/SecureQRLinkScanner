@@ -118,6 +118,52 @@ function normalizeHost(host) {
   return lower.startsWith('www.') ? lower.slice(4) : lower;
 }
 
+function classifyAsText(normalized) {
+  const lowerText = String(normalized || '').toLowerCase();
+  const reasons = [];
+  let score = 0;
+  const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
+  if (foundKeywords.length > 0) {
+    reasons.push('classifier.keywordWarning');
+    score += Math.min(foundKeywords.length, 3);
+  }
+  const level = score >= 1 ? 'suspicious' : 'secure';
+  return { normalized, isUrl: false, type: 'text', level, reasons, score };
+}
+
+function looksLikeWebHostCandidate(value) {
+  const s = String(value || '').trim();
+  if (!s) return false;
+  if (/\s/.test(s)) return false;
+
+  const pre = s.toLowerCase();
+  if (pre.startsWith('mailto:') || pre.startsWith('tel:') || pre.startsWith('sms:') || pre.startsWith('geo:')) return false;
+
+  const withoutScheme = s.replace(/^https?:\/\//i, '');
+  const hostPort = withoutScheme.split(/[/?#]/)[0] || '';
+  if (!hostPort) return false;
+
+  const host = hostPort.replace(/:\d+$/, '');
+  if (!host) return false;
+
+  if (isIPv4(host) || isIPv6(host)) return true;
+  if (!host.includes('.')) return false;
+
+  const labels = host.toLowerCase().split('.').filter(Boolean);
+  if (labels.length < 2) return false;
+  if (labels.some(l => l.length > 63)) return false;
+  if (labels.some(l => !/^[a-z0-9-]+$/.test(l) || l.startsWith('-') || l.endsWith('-'))) return false;
+
+  const tld = labels[labels.length - 1] || '';
+  if (tld.startsWith('xn--')) return true;
+  if (!/^[a-z]{2,24}$/.test(tld)) return false;
+
+  const hasAlphaLabel = labels.some(l => /[a-z]/.test(l));
+  if (!hasAlphaLabel) return false;
+
+  return true;
+}
+
 // (Blacklist functionality removed)
 
 // ------------------------
@@ -329,14 +375,16 @@ export function classifyInput(input, scannedType = null) {
     return { type: 'tel', normalized: `tel:${num}`, isUrl: false, tel: { number: num } };
   }
 
-  // If it is a known barcode type and not a URL structure, treat as plain text
-  if (isBarcode && !/^https?:\/\//i.test(normalized) && !normalized.includes('.')) {
-    return { normalized, isUrl: false, type: 'text', level: 'secure', reasons: [], score: 0 };
+  if (isBarcode && !/^https?:\/\//i.test(normalized)) {
+    return { normalized, isUrl: false, type: scannedType, level: 'secure', reasons: [], score: 0 };
   }
   
   try {
     // Add scheme if missing for parsing
     if (!/^https?:\/\//i.test(normalized)) {
+      if (!looksLikeWebHostCandidate(normalized)) {
+        return classifyAsText(normalized);
+      }
       normalized = 'http://' + normalized;
     }
     
@@ -452,17 +500,8 @@ export function classifyInput(input, scannedType = null) {
     return { normalized, isUrl: true, type: 'url', level, reasons, score };
     
   } catch (e) {
-    const lowerText = normalized.toLowerCase();
-    const reasons = [];
-    let score = 0;
-    const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
-    if (foundKeywords.length > 0) {
-      reasons.push('classifier.keywordWarning');
-      score += Math.min(foundKeywords.length, 3);
-    }
-    const level = score >= 1 ? 'suspicious' : 'secure';
-    return { normalized, isUrl: false, type: 'text', level, reasons, score };
-}
+    return classifyAsText(normalized);
+  }
 }
 
 /**
@@ -510,14 +549,16 @@ export async function classifyInputAsync(input, scannedType = null) {
     return { type: 'tel', normalized: `tel:${num}`, isUrl: false, tel: { number: num } };
   }
 
-  // If it is a known barcode type and not a URL structure, treat as plain text
-  if (isBarcode && !/^https?:\/\//i.test(normalized) && !normalized.includes('.')) {
-    return { normalized, isUrl: false, type: 'text', level: 'secure', reasons: [], score: 0 };
+  if (isBarcode && !/^https?:\/\//i.test(normalized)) {
+    return { normalized, isUrl: false, type: scannedType, level: 'secure', reasons: [], score: 0 };
   }
   
   try {
     // Add scheme if missing for parsing
     if (!/^https?:\/\//i.test(normalized)) {
+      if (!looksLikeWebHostCandidate(normalized)) {
+        return classifyAsText(normalized);
+      }
       normalized = 'http://' + normalized;
     }
     
@@ -530,17 +571,8 @@ export async function classifyInputAsync(input, scannedType = null) {
     return { normalized, isUrl: true, type: 'url', level, reasons, score };
     
   } catch (e) {
-    const lowerText = normalized.toLowerCase();
-    const reasons = [];
-    let score = 0;
-    const foundKeywords = SUS_KEYWORDS.filter(k => lowerText.includes(k));
-    if (foundKeywords.length > 0) {
-      reasons.push('classifier.keywordWarning');
-      score += Math.min(foundKeywords.length, 3);
-    }
-    const level = score >= 1 ? 'suspicious' : 'secure';
-    return { normalized, isUrl: false, type: 'text', level, reasons, score };
-}
+    return classifyAsText(normalized);
+  }
 }
 
 // ------------------------

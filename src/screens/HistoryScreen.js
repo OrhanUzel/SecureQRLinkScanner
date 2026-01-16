@@ -32,7 +32,7 @@ const HistoryItem = React.memo(({
   const getLevelInfo = (level) => {
     if (level === 'secure') return { text: t('result.secure'), color: '#2f9e44', icon: 'shield-checkmark' };
     if (level === 'suspicious') return { text: t('result.suspicious'), color: '#ffb703', icon: 'warning' };
-    if (level === 'unsafe') return { text: t('result.unsafe'), color: '#d00000', icon: 'alert-circle' };
+    if (level === 'unsafe') return { text: t('result.unsafe'), color: '#d00000', icon: 'shield' };
     return { text: level || 'Bilinmiyor', color: '#6e7781', icon: 'help-circle' };
   };
 

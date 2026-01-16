@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal, Animated, KeyboardAvoidingView } from 'react-native';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal, Animated } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { styles } from './CreateQrScreen.styles';
 import { Ionicons, Fontisto } from '@expo/vector-icons';
@@ -99,6 +99,7 @@ export default function CreateQrScreen() {
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
   const insets = useSafeAreaInsets();
+  const toastBottomOffset = Math.max((insets?.bottom ?? 0) + 32, 32);
   const navigation = useNavigation();
   const isWeb = Platform.OS === 'web';
   const qrRef = useRef(null);
@@ -451,7 +452,7 @@ export default function CreateQrScreen() {
   const handleIconSelect = useCallback((icon) => {
     if (!uiState.premium && !unlockState.unlockedModes.icon_pack) {
       updateUnlock({ pendingCustomMode: 'logo_frame' });
-      updateUi({ customGateVisible: true });
+      openCustomGate();
       return;
     }
 
@@ -518,13 +519,78 @@ export default function CreateQrScreen() {
     loadFavorites();
   }, []);
 
+  const overlayDelayMs = Platform.OS === 'ios' ? 60 : 0;
+
+  const closeOverlays = useCallback(() => {
+    updateUi({
+      qrTypePickerVisible: false,
+      barcodeFormatPickerVisible: false,
+      iconPickerVisible: false,
+      colorPickerVisible: false,
+      customGateVisible: false,
+      unlockModalVisible: false,
+      customGateLoading: false,
+    });
+  }, [updateUi]);
+
+  const openCustomGate = useCallback(() => {
+    closeOverlays();
+    if (overlayDelayMs > 0) {
+      setTimeout(() => updateUi({ customGateVisible: true }), overlayDelayMs);
+    } else {
+      updateUi({ customGateVisible: true });
+    }
+  }, [closeOverlays, overlayDelayMs, updateUi]);
+
+  const openQrTypePicker = useCallback(() => {
+    closeOverlays();
+    if (overlayDelayMs > 0) {
+      setTimeout(() => updateUi({ qrTypePickerVisible: true }), overlayDelayMs);
+    } else {
+      updateUi({ qrTypePickerVisible: true });
+    }
+  }, [closeOverlays, overlayDelayMs, updateUi]);
+
+  const openBarcodeFormatPicker = useCallback(() => {
+    closeOverlays();
+    if (overlayDelayMs > 0) {
+      setTimeout(() => updateUi({ barcodeFormatPickerVisible: true }), overlayDelayMs);
+    } else {
+      updateUi({ barcodeFormatPickerVisible: true });
+    }
+  }, [closeOverlays, overlayDelayMs, updateUi]);
+
+  const openIconPicker = useCallback(() => {
+    closeOverlays();
+    if (overlayDelayMs > 0) {
+      setTimeout(() => updateUi({ iconPickerVisible: true }), overlayDelayMs);
+    } else {
+      updateUi({ iconPickerVisible: true });
+    }
+  }, [closeOverlays, overlayDelayMs, updateUi]);
+
+  const openColorPicker = useCallback((target) => {
+    closeOverlays();
+    if (target === 'frame') {
+      updateQr({ tempFrameColor: qrSettings.frameThemeColor });
+    } else {
+      updateQr({ tempQrColor: qrSettings.qrColor });
+    }
+    const open = () => updateUi({ colorPickerVisible: true, colorPickerTarget: target });
+    if (overlayDelayMs > 0) {
+      setTimeout(open, overlayDelayMs);
+    } else {
+      open();
+    }
+  }, [closeOverlays, overlayDelayMs, qrSettings.frameThemeColor, qrSettings.qrColor, updateQr, updateUi]);
+
   const ensureCustomAccess = useCallback((modeKey) => {
     if (modeKey === 'none') return true;
     if (isModeUnlocked(modeKey)) return true;
     updateUnlock({ pendingCustomMode: modeKey });
-    updateUi({ customGateVisible: true });
+    openCustomGate();
     return false;
-  }, [isModeUnlocked]);
+  }, [isModeUnlocked, openCustomGate, updateUnlock]);
 
   const handleCustomModePress = useCallback((modeKey) => {
     if (modeKey === 'none') {
@@ -536,8 +602,8 @@ export default function CreateQrScreen() {
       return;
     }
     updateUnlock({ pendingCustomMode: modeKey });
-    updateUi({ customGateVisible: true });
-  }, [uiState.premium, isModeUnlocked]);
+    openCustomGate();
+  }, [uiState.premium, isModeUnlocked, openCustomGate, updateUnlock]);
 
   const ensureBarcodeAccess = useCallback(() => {
     if (qrSettings.symbolType !== 'barcode') return true;
@@ -545,9 +611,9 @@ export default function CreateQrScreen() {
     if (unlockState.unlockedModes.barcode_generate) return true;
 
     updateUnlock({ pendingCustomMode: 'barcode_generate', pendingQrType: null });
-    updateUi({ customGateVisible: true });
+    openCustomGate();
     return false;
-  }, [qrSettings.symbolType, uiState.premium, unlockState.unlockedModes]);
+  }, [qrSettings.symbolType, uiState.premium, unlockState.unlockedModes, openCustomGate, updateUnlock]);
 
   const isBarcodeGenerateLocked = useMemo(() => {
     if (qrSettings.symbolType !== 'barcode') return false;
@@ -560,9 +626,9 @@ export default function CreateQrScreen() {
     if (!needsUnlock) return true;
     if (uiState.premium || unlockState.unlockedModes[typeKey]) return true;
     updateUnlock({ pendingQrType: typeKey });
-    updateUi({ customGateVisible: true });
+    openCustomGate();
     return false;
-  }, [uiState.premium, unlockState.unlockedModes]);
+  }, [uiState.premium, unlockState.unlockedModes, openCustomGate, updateUnlock]);
 
   const handleQrTypePress = useCallback((typeKey) => {
     if (!ensureTypeAccess(typeKey)) return;
@@ -571,7 +637,7 @@ export default function CreateQrScreen() {
   }, [ensureTypeAccess]);
 
   const closeCustomGate = useCallback(() => {
-    updateUi({ customGateVisible: false, rewardUnlocked: false, unlockModalVisible: false });
+    updateUi({ customGateVisible: false, rewardUnlocked: false, unlockModalVisible: false, customGateLoading: false });
     updateUnlock({ pendingCustomMode: null, pendingQrType: null, pendingTemplateKey: null });
   }, []);
 
@@ -1039,11 +1105,7 @@ export default function CreateQrScreen() {
   }, [qrSettings.symbolType, t]);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={insets.top}
-    >
+    <View style={{ flex: 1 }}>
       <ScrollView style={containerStyle} contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
         <QrHero dark={dark} compact={compact} heroContent={heroContent} heroCardStyle={heroCardStyle} />
 
@@ -1105,7 +1167,7 @@ export default function CreateQrScreen() {
                 <TouchableOpacity
                   onPress={() => {
                     Keyboard.dismiss();
-                    updateUi({ qrTypePickerVisible: true });
+                    openQrTypePicker();
                   }}
                  style={[
                   styles.typeChip,
@@ -1177,12 +1239,13 @@ export default function CreateQrScreen() {
                   />
                 </TouchableOpacity>
 
-                <Modal
-                  visible={uiState.qrTypePickerVisible}
-                  transparent
-                  animationType="fade"
-                  onRequestClose={() => updateUi({ qrTypePickerVisible: false })}
-                >
+                {uiState.qrTypePickerVisible && (
+                  <Modal
+                    visible={uiState.qrTypePickerVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => updateUi({ qrTypePickerVisible: false })}
+                  >
                   <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -1325,14 +1388,15 @@ export default function CreateQrScreen() {
                       </ScrollView>
                     </View>
                   </View>
-                </Modal>
+                  </Modal>
+                )}
               </View>
             ) : (
               <View style={[styles.typeRow, { marginTop: 4 }]}>
                 <TouchableOpacity
                   onPress={() => {
                     Keyboard.dismiss();
-                    updateUi({ barcodeFormatPickerVisible: true });
+                    openBarcodeFormatPicker();
                   }}
                  style={[
                   styles.typeChip,
@@ -1385,12 +1449,13 @@ export default function CreateQrScreen() {
                   />
                 </TouchableOpacity>
 
-                <Modal
-                  visible={uiState.barcodeFormatPickerVisible}
-                  transparent
-                  animationType="fade"
-                  onRequestClose={() => updateUi({ barcodeFormatPickerVisible: false })}
-                >
+                {uiState.barcodeFormatPickerVisible && (
+                  <Modal
+                    visible={uiState.barcodeFormatPickerVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => updateUi({ barcodeFormatPickerVisible: false })}
+                  >
                   <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
                     <TouchableOpacity
                       style={{ flex: 1 }}
@@ -1537,7 +1602,8 @@ export default function CreateQrScreen() {
                       </ScrollView>
                     </View>
                   </View>
-                </Modal>
+                  </Modal>
+                )}
               </View>
             )}
           </View>
@@ -1804,11 +1870,10 @@ export default function CreateQrScreen() {
                     onPress={() => {
                       if (!isModeUnlocked('qr_color')) {
                         updateUnlock({ pendingCustomMode: 'qr_color' });
-                        updateUi({ customGateVisible: true });
+                        openCustomGate();
                         return;
                       }
-                      updateQr({ tempQrColor: qrSettings.qrColor });
-                      updateUi({ colorPickerVisible: true, colorPickerTarget: 'barcode' });
+                      openColorPicker('barcode');
                     }}
                     activeOpacity={0.85}
                     style={[
@@ -1940,11 +2005,10 @@ export default function CreateQrScreen() {
                 onPress={() => {
                   if (!isModeUnlocked('qr_color')) {
                     updateUnlock({ pendingCustomMode: 'qr_color' });
-                    updateUi({ customGateVisible: true });
+                    openCustomGate();
                     return;
                   }
-                  updateQr({ tempQrColor: qrSettings.qrColor });
-                  updateUi({ colorPickerVisible: true, colorPickerTarget: 'qr' });
+                  openColorPicker('qr');
                 }}
                 activeOpacity={0.85}
                 style={[styles.customModeChip, { backgroundColor: dark ? '#111827' : '#f8fafc', borderColor: dark ? '#1f2937' : '#e2e8f0', flex: 1, justifyContent: 'center' }, !isModeUnlocked('qr_color') ? { opacity: 0.65 } : null]}
@@ -1957,8 +2021,7 @@ export default function CreateQrScreen() {
               {showFrameControls && (
                 <TouchableOpacity
                   onPress={() => {
-                    updateQr({ tempFrameColor: qrSettings.frameThemeColor });
-                    updateUi({ colorPickerVisible: true, colorPickerTarget: 'frame' });
+                    openColorPicker('frame');
                   }}
                   activeOpacity={0.85}
                   style={[styles.customModeChip, { backgroundColor: dark ? '#111827' : '#f8fafc', borderColor: dark ? '#1f2937' : '#e2e8f0', flex: 1, justifyContent: 'center' }]}
@@ -1996,7 +2059,7 @@ export default function CreateQrScreen() {
                   <TouchableOpacity style={[styles.logoActionBtn, { backgroundColor: '#2563eb' }]} onPress={pickCustomLogo} disabled={uiState.logoBusy}>
                     {uiState.logoBusy ? <ActivityIndicator color="#fff" size="small" /> : <><Ionicons name="cloud-upload-outline" size={18} color="#fff" /><Text style={styles.logoActionText}>{qrSettings.customLogo ? (t('custom_qr_change_logo') || 'Logoyu değiştir') : (t('custom_qr_add_logo') || 'Logo ekle')}</Text></>}
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.logoActionBtnSecondary, { borderColor: '#cbd5f5' }]} onPress={() => updateUi({ iconPickerVisible: true })}>
+                  <TouchableOpacity style={[styles.logoActionBtnSecondary, { borderColor: '#cbd5f5' }]} onPress={openIconPicker}>
                     <Ionicons name="sparkles-outline" size={18} color="#2563eb" />
                     <Text style={[styles.logoActionTextSecondary, { color: '#2563eb' }]}>{t('custom_qr_choose_icon') || 'Hazır ikon seç'}</Text>
                   </TouchableOpacity>
@@ -2083,32 +2146,36 @@ export default function CreateQrScreen() {
         onHide={() =>
           updateUi({ toast: { ...uiState.toast, visible: false } })
         }
-        style={{ bottom: Math.max(insets.bottom + 32, 32) }}
+        style={{ bottom: toastBottomOffset }}
       />
 
-      <IconPickerModal
-        dark={dark}
-        t={t}
-        uiState={uiState}
-        unlockState={unlockState}
-        updateUi={updateUi}
-        previewFrameColor={previewFrameColor}
-        previewQrColor={previewQrColor}
-        previewIcon={previewIcon}
-        handleIconSelect={handleIconSelect}
-        ICON_CATEGORIES={ICON_CATEGORIES}
-        ICON_LIBRARY={ICON_LIBRARY}
-      />
+      {uiState.iconPickerVisible ? (
+        <IconPickerModal
+          dark={dark}
+          t={t}
+          uiState={uiState}
+          unlockState={unlockState}
+          updateUi={updateUi}
+          previewFrameColor={previewFrameColor}
+          previewQrColor={previewQrColor}
+          previewIcon={previewIcon}
+          handleIconSelect={handleIconSelect}
+          ICON_CATEGORIES={ICON_CATEGORIES}
+          ICON_LIBRARY={ICON_LIBRARY}
+        />
+      ) : null}
 
-      <ColorPickerModal
-        dark={dark}
-        t={t}
-        uiState={uiState}
-        qrSettings={qrSettings}
-        updateUi={updateUi}
-        updateQr={updateQr}
-        onColorChange={onColorChange}
-      />
+      {uiState.colorPickerVisible ? (
+        <ColorPickerModal
+          dark={dark}
+          t={t}
+          uiState={uiState}
+          qrSettings={qrSettings}
+          updateUi={updateUi}
+          updateQr={updateQr}
+          onColorChange={onColorChange}
+        />
+      ) : null}
 
       {/* Unlock Success Modal */}
       <Modal visible={uiState.unlockModalVisible} animationType="fade" transparent onRequestClose={closeCustomGate}>
@@ -2231,6 +2298,6 @@ export default function CreateQrScreen() {
         type={uiState.statusModal.type}
         onClose={() => updateUi({ statusModal: { ...uiState.statusModal, visible: false } })}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }

@@ -29,11 +29,6 @@ log('BASE_URL', BASE_URL);
  * @property {string[]} [foundInFiles]
  */
 
-/**
- * Call remote riskcheck API with the given URL.
- * @param {string} url
- * @returns {Promise<RiskCheckResponse>}
- */
 export async function checkRisk(url) {
   if (!BASE_URL) {
     return {
@@ -44,11 +39,16 @@ export async function checkRisk(url) {
       error: 'missing_base_url'
     };
   }
+  const hasAbort = typeof AbortController !== 'undefined';
+  const controller = hasAbort ? new AbortController() : null;
+  const timeoutMs = 10000;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   const endpoint = `${BASE_URL}/api/riskcheck?url=${encodeURIComponent(url)}`;
   const t0 = Date.now();
   log('Request start', { platform: Platform.OS, endpoint, url });
   try {
-    const res = await fetch(endpoint);
+    const res = await fetch(endpoint, controller ? { signal: controller.signal } : undefined);
+    if (timeoutId) clearTimeout(timeoutId);
     const ms = Date.now() - t0;
     log('Response', { status: res.status, ms });
     if (!res.ok) {
@@ -89,14 +89,24 @@ export async function checkRisk(url) {
     }
     return data;
   } catch (e) {
+    if (timeoutId) clearTimeout(timeoutId);
     const ms = Date.now() - t0;
     log('Fetch error', { ms, error: e?.message });
+    const name = e?.name || '';
+    const msg = e?.message || '';
+    const isAbort = name === 'AbortError';
+    const isNetworkFailed = msg.toLowerCase().includes('network request failed');
+    const errorCode = isAbort
+      ? 'request_timeout'
+      : isNetworkFailed
+      ? 'network_unreachable'
+      : msg || 'Network error';
     return {
       isRisky: false,
       message: '',
       checkedDomain: '',
       foundInFiles: [],
-      error: e?.message || 'Network error',
+      error: errorCode,
     };
   }
 }
