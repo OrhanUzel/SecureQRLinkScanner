@@ -37,6 +37,7 @@ export default function CodeScanScreen({ navigation }) {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const isScanning = useRef(false);
   const lastScannedValue = useRef(null);
+  const pendingLinkAction = useRef({ url: null, shouldConfirm: true });
 
   const [permission, requestPermission] = useCameraPermissions();
   const [result, setResult] = useState(null);
@@ -52,6 +53,26 @@ export default function CodeScanScreen({ navigation }) {
   const [toastMsg, setToastMsg] = useState('');
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
   const insets = useSafeAreaInsets();
+  const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
+  const SCAN_HAPTICS_ENABLED_KEY = 'scan_haptics_enabled';
+
+  const getAlwaysConfirmLink = async () => {
+    try {
+      const v = await AsyncStorage.getItem(ALWAYS_CONFIRM_LINK_KEY);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  };
+
+  const getScanHapticsEnabled = async () => {
+    try {
+      const v = await AsyncStorage.getItem(SCAN_HAPTICS_ENABLED_KEY);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  };
 
   // Her girişte (ekran odaklandığında) izni tekrar iste.
   // Android OS izin ekranını otomatik tetikler (canAskAgain=true ise).
@@ -105,28 +126,49 @@ export default function CodeScanScreen({ navigation }) {
     // Try multiple properties from different expo-camera versions
     const barcode = Array.isArray(ev?.barcodes) ? ev.barcodes[0] : ev;
     
-    // Check all possible data properties
-    const possibleData = [
+    const rawCandidates = [
       barcode?.rawValue,
-      barcode?.data, 
+      barcode?.data,
       barcode?.raw,
       barcode?.value,
       ev?.data,
       ev?.rawValue,
       ev?.raw,
       ev?.value
-    ].find(d => d && typeof d === 'string' && d.length > 0);
-    
-    let data = typeof possibleData === 'string' ? possibleData.trim() : String(possibleData ?? '').trim();
-    
-    // Try URL decoding if data looks URL-encoded (contains %XX patterns)
-    if (data.includes('%')) {
-      try {
-        const decoded = decodeURIComponent(data);
-        if (__DEV__) console.log('[CodeScanScreen] URL decoded data:', decoded);
-        data = decoded;
-      } catch (e) {
-        if (__DEV__) console.log('[CodeScanScreen] URL decode failed, using original');
+    ]
+      .filter((d) => typeof d === 'string')
+      .map((d) => d.trim())
+      .filter((d) => d.length > 0);
+
+    const candidates = [];
+    for (const c of rawCandidates) {
+      if (!candidates.includes(c)) candidates.push(c);
+      if (/%[0-9A-Fa-f]{2}/.test(c)) {
+        try {
+          const decoded = decodeURIComponent(c);
+          const d2 = typeof decoded === 'string' ? decoded.trim() : '';
+          if (d2 && !candidates.includes(d2)) candidates.push(d2);
+        } catch {}
+      }
+    }
+
+    const scoreCandidate = (s) => {
+      let score = 0;
+      if (/^WIFI:/i.test(s)) score += 1000;
+      if (/^(https?:\/\/)/i.test(s)) score += 900;
+      if (/^(tel:|mailto:|sms:|smsto:|geo:|BEGIN:)/i.test(s)) score += 800;
+      if (/^WIFI/i.test(s)) score += 200;
+      score += Math.min(s.length, 500) / 10;
+      return score;
+    };
+
+    let data = candidates[0] || '';
+    let bestScore = data ? scoreCandidate(data) : -Infinity;
+    for (const c of candidates) {
+      const sc = scoreCandidate(c);
+      if (sc > bestScore) {
+        bestScore = sc;
+        data = c;
       }
     }
     
@@ -141,7 +183,12 @@ export default function CodeScanScreen({ navigation }) {
 
     isScanning.current = true;
     lastScannedValue.current = data;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const enabled = await getScanHapticsEnabled();
+      if (enabled) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {}
 
     let usomBad = false;
     try {
@@ -221,21 +268,39 @@ export default function CodeScanScreen({ navigation }) {
   const openLink = async () => {
     if (!result?.normalized) return;
     const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized;
+    const shouldConfirm = await getAlwaysConfirmLink();
+    pendingLinkAction.current = { url: raw, shouldConfirm };
     setPendingUrl(raw);
-
     const triggered = await registerLinkOpen();
     if (!triggered) {
-      setConfirmVisible(true);
+      pendingLinkAction.current = { url: null, shouldConfirm: true };
+      if (shouldConfirm) {
+        setConfirmVisible(true);
+      } else {
+        try {
+          await openExternalUrl(raw);
+        } catch {}
+        setPendingUrl(null);
+      }
     }
   };
 
   const handleFeedbackClose = () => {
     closeFeedback();
-    if (pendingUrl) {
-      setTimeout(() => {
+    const act = pendingLinkAction.current;
+    if (!act?.url) return;
+    setTimeout(async () => {
+      if (act.shouldConfirm) {
         setConfirmVisible(true);
-      }, 300);
-    }
+      } else {
+        try {
+          await openExternalUrl(act.url);
+        } catch {}
+        setConfirmVisible(false);
+        setPendingUrl(null);
+      }
+      pendingLinkAction.current = { url: null, shouldConfirm: true };
+    }, 300);
   };
 
   const openVirusTotal = async () => {

@@ -52,6 +52,18 @@ export default function ImageScanScreen() {
   const [inversionTask, setInversionTask] = useState(null);
   const hasHandledSharedImage = useRef(false);
   const lastHandledSharedImageUri = useRef(null);
+  const pendingLinkAction = useRef({ url: null, shouldConfirm: true });
+
+  const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
+
+  const getAlwaysConfirmLink = async () => {
+    try {
+      const v = await AsyncStorage.getItem(ALWAYS_CONFIRM_LINK_KEY);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  };
 
   // Cleanup helper to delete temporary files
   const cleanupTempFiles = async () => {
@@ -136,13 +148,18 @@ export default function ImageScanScreen() {
     };
 
     const prepareDeepVariantsForScan = async (base) => {
+      const isIOS = Platform.OS === 'ios';
+      
       const variants = [];
       if (!base?.uri) return variants;
 
       if (base?.width && base?.height) {
         const minDim = Math.min(base.width, base.height);
-        const cropScales = [0.92, 0.86];
+        const cropScales = isIOS ? [0.85] : [0.92, 0.86];
+        
         for (const scale of cropScales) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+
           const cropSize = Math.floor(minDim * scale);
           const originX = Math.max(0, Math.floor((base.width - cropSize) / 2));
           const originY = Math.max(0, Math.floor((base.height - cropSize) / 2));
@@ -150,7 +167,7 @@ export default function ImageScanScreen() {
             const crop = await ImageManipulator.manipulateAsync(
               base.uri,
               [{ crop: { originX, originY, width: cropSize, height: cropSize } }],
-              { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG }
+              { compress: isIOS ? 0.8 : 0.92, format: ImageManipulator.SaveFormat.JPEG }
             );
             if (crop?.uri) variants.push(crop.uri);
           } catch (e) {
@@ -159,7 +176,10 @@ export default function ImageScanScreen() {
         }
       }
 
+      if (isIOS) return variants;
+
       try {
+        await new Promise(resolve => setTimeout(resolve, 50));
         const resizedForInvert = await ImageManipulator.manipulateAsync(
           base.uri,
           [{ resize: { width: 900 } }],
@@ -857,10 +877,20 @@ export default function ImageScanScreen() {
                   icon: 'open-outline',
                   onPress: async () => { 
                     const raw = result.normalized.startsWith('http') ? result.normalized : 'https://' + result.normalized; 
+                    const shouldConfirm = await getAlwaysConfirmLink();
+                    pendingLinkAction.current = { url: raw, shouldConfirm };
                     setPendingUrl(raw);
                     const triggered = await registerLinkOpen(); 
                     if (!triggered) { 
-                      setConfirmVisible(true); 
+                      pendingLinkAction.current = { url: null, shouldConfirm: true };
+                      if (shouldConfirm) {
+                        setConfirmVisible(true); 
+                      } else {
+                        try {
+                          await openExternalUrl(raw);
+                        } catch {}
+                        setPendingUrl(null);
+                      }
                     } 
                   },
                   color: '#2da44e',
@@ -964,9 +994,20 @@ export default function ImageScanScreen() {
         visible={feedbackVisible}
         onClose={() => { 
           closeFeedback(); 
-          if (pendingUrl) { 
-            setTimeout(() => { setConfirmVisible(true); }, 300); 
-          } 
+          const act = pendingLinkAction.current;
+          if (!act?.url) return;
+          setTimeout(async () => {
+            if (act.shouldConfirm) {
+              setConfirmVisible(true);
+            } else {
+              try {
+                await openExternalUrl(act.url);
+              } catch {}
+              setConfirmVisible(false);
+              setPendingUrl(null);
+            }
+            pendingLinkAction.current = { url: null, shouldConfirm: true };
+          }, 300);
         }}
         onFeedbackGiven={markFeedbackGiven}
       />

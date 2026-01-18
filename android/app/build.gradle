@@ -4,6 +4,10 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
+def appConfigVersionName = ["node", "-e", "const path=require('path');const root=process.argv[1];const cfg=require(path.join(root,'app.config.js'));process.stdout.write(String(cfg?.expo?.version||''));", projectRoot].execute(null, rootDir).text.trim()
+def appConfigVersionCodeRaw = ["node", "-e", "const path=require('path');const root=process.argv[1];const cfg=require(path.join(root,'app.config.js'));const v=cfg?.expo?.android?.versionCode;process.stdout.write(String(v==null?'':v));", projectRoot].execute(null, rootDir).text.trim()
+def appConfigVersionCode = (appConfigVersionCodeRaw ?: "0").toInteger()
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -97,8 +101,8 @@ android {
         applicationId 'com.orhanuzel.secureqrlinkscanner'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 17
-        versionName "1.6.0"
+        versionCode appConfigVersionCode
+        versionName appConfigVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal, Platform, Share, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
@@ -12,9 +12,17 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 import StatusModal from '../components/StatusModal';
+import { getHistory, clearHistory } from '../utils/classifier';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
+import FeedbackModal from '../components/FeedbackModal';
+import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
+  const { markFeedbackGiven } = useFeedbackSystem();
   const { dark, theme, setTheme } = useAppTheme();
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 640;
@@ -28,7 +36,15 @@ export default function SettingsScreen() {
   const [toastType, setToastType] = useState('error');
   const [infoModal, setInfoModal] = useState({ visible: false, title: '', message: '' });
   const [statusModal, setStatusModal] = useState({ visible: false, title: '', message: '', type: 'error' });
+  const [alwaysConfirmLink, setAlwaysConfirmLink] = useState(true);
+  const [scanHapticsEnabled, setScanHapticsEnabled] = useState(true);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [clearHistoryModalVisible, setClearHistoryModalVisible] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
   const insets = useSafeAreaInsets();
+
+  const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
+  const SCAN_HAPTICS_ENABLED_KEY = 'scan_haptics_enabled';
 
   useEffect(() => {
     loadSettings();
@@ -54,17 +70,21 @@ export default function SettingsScreen() {
 
   const loadSettings = async () => {
     try {
-      const [savedLang, savedTheme, consent, premiumFlag, savedInfo] = await Promise.all([
+      const [savedLang, savedTheme, consent, premiumFlag, savedInfo, confirmPref, scanHapticsPref] = await Promise.all([
         AsyncStorage.getItem(LANGUAGE_KEY),
         AsyncStorage.getItem('theme'),
         getConsentInfo(),
         AsyncStorage.getItem('premium'),
-        AsyncStorage.getItem('premium_info')
+        AsyncStorage.getItem('premium_info'),
+        AsyncStorage.getItem(ALWAYS_CONFIRM_LINK_KEY),
+        AsyncStorage.getItem(SCAN_HAPTICS_ENABLED_KEY)
       ]);
       
       if (savedLang) setLanguage(savedLang);
       if (savedTheme) setTheme(savedTheme);
       if (consent) setConsentInfo(consent);
+      setAlwaysConfirmLink(confirmPref === null ? true : confirmPref === 'true');
+      setScanHapticsEnabled(scanHapticsPref === null ? true : scanHapticsPref === 'true');
       if (premiumFlag === 'true') {
         setPremium(true);
         if (savedInfo) {
@@ -101,6 +121,254 @@ export default function SettingsScreen() {
     navigation.navigate('Disclaimer');
   };
 
+  const shareContentAsFile = async (filename, mime, content) => {
+    try {
+      if (Platform.OS === 'web') {
+        try {
+          const blob = new Blob([content], { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return true;
+        } catch {
+          setToastType('error');
+          setToastMessage(t('web_download_unavailable'));
+          setToastVisible(true);
+          return false;
+        }
+      }
+      const uri = FileSystem.cacheDirectory + filename;
+      await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
+      const available = await Sharing.isAvailableAsync();
+      if (available) {
+        await Sharing.shareAsync(uri, { mimeType: mime });
+      } else {
+        await Share.share({ message: content });
+      }
+      return true;
+    } catch {
+      setToastType('error');
+      setToastMessage(t('share_unavailable'));
+      setToastVisible(true);
+      return false;
+    }
+  };
+
+  const downloadContentAsFile = async (filename, mime, content) => {
+    try {
+      if (Platform.OS === 'web') {
+        try {
+          const blob = new Blob([content], { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return true;
+        } catch {
+          setToastType('error');
+          setToastMessage(t('web_download_unavailable'));
+          setToastVisible(true);
+          return false;
+        }
+      }
+      if (Platform.OS === 'android' && FileSystem?.StorageAccessFramework?.requestDirectoryPermissionsAsync) {
+        const perms = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!perms?.granted || !perms?.directoryUri) return false;
+        const uri = await FileSystem.StorageAccessFramework.createFileAsync(perms.directoryUri, filename, mime);
+        await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
+        return true;
+      }
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      const uri = baseDir + filename;
+      await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
+      return true;
+    } catch {
+      setToastType('error');
+      setToastMessage(t('share_unavailable'));
+      setToastVisible(true);
+      return false;
+    }
+  };
+
+  const exportHistory = async (format) => {
+    try {
+      const items = await getHistory();
+      if (!items?.length) {
+        setStatusModal({
+          visible: true,
+          title: t('settings.exportHistoryEmptyTitle'),
+          message: t('settings.exportHistoryEmptyMessage'),
+          type: 'info'
+        });
+        return;
+      }
+
+      const date = new Date();
+      const y = String(date.getFullYear());
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const stamp = `${y}-${m}-${d}`;
+
+      if (format === 'json') {
+        const enriched = (items || []).map((it) => {
+          const ts = it?.timestamp;
+          const hasTs = typeof ts === 'number' && Number.isFinite(ts);
+          return {
+            ...it,
+            timestamp_iso: hasTs ? new Date(ts).toISOString() : null,
+            timestamp_local: hasTs ? new Date(ts).toLocaleString() : null
+          };
+        });
+        const content = JSON.stringify(enriched, null, 2);
+        const ok = await shareContentAsFile(`scan_history_${stamp}.json`, 'application/json', content);
+        if (ok) {
+          setToastType('success');
+          setToastMessage(t('settings.exportHistorySuccess'));
+          setToastVisible(true);
+        }
+        return;
+      }
+
+      const delimiter = ',';
+      const header = ['timestamp', 'timestamp_iso', 'content', 'level', 'type', 'contentType', 'country', 'wifi_ssid', 'wifi_security', 'wifi_password', 'wifi_hidden'];
+      const csvEscape = (v) => {
+        const s = v === null || v === undefined ? '' : String(v);
+        return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = items.map((it) => {
+        const wifi = it?.wifi || null;
+        const ts = it?.timestamp ?? '';
+        const iso = typeof ts === 'number' && Number.isFinite(ts) ? new Date(ts).toISOString() : '';
+        return [
+          ts,
+          iso,
+          it?.content ?? it?.normalized ?? '',
+          it?.level ?? '',
+          it?.type ?? '',
+          it?.contentType ?? it?.kind ?? '',
+          typeof it?.country === 'string' ? it.country : (it?.country?.label || it?.country?.name || ''),
+          wifi?.ssid ?? '',
+          wifi?.security ?? '',
+          wifi?.password ?? '',
+          wifi?.hidden ? 'true' : 'false',
+        ].map(csvEscape).join(delimiter);
+      });
+      const content = `\ufeffsep=${delimiter}\r\n${[header.join(delimiter), ...rows].join('\r\n')}`;
+      const ok = await shareContentAsFile(`scan_history_${stamp}.csv`, 'text/csv', content);
+      if (ok) {
+        setToastType('success');
+        setToastMessage(t('settings.exportHistorySuccess'));
+        setToastVisible(true);
+      }
+    } catch {
+      setToastType('error');
+      setToastMessage(t('share_unavailable'));
+      setToastVisible(true);
+    }
+  };
+
+  const downloadHistory = async (format) => {
+    try {
+      const items = await getHistory();
+      if (!items?.length) {
+        setStatusModal({
+          visible: true,
+          title: t('settings.exportHistoryEmptyTitle'),
+          message: t('settings.exportHistoryEmptyMessage'),
+          type: 'info'
+        });
+        return;
+      }
+
+      const date = new Date();
+      const y = String(date.getFullYear());
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const stamp = `${y}-${m}-${d}`;
+
+      if (format === 'json') {
+        const enriched = (items || []).map((it) => {
+          const ts = it?.timestamp;
+          const hasTs = typeof ts === 'number' && Number.isFinite(ts);
+          return {
+            ...it,
+            timestamp_iso: hasTs ? new Date(ts).toISOString() : null,
+            timestamp_local: hasTs ? new Date(ts).toLocaleString() : null
+          };
+        });
+        const content = JSON.stringify(enriched, null, 2);
+        const ok = await downloadContentAsFile(`scan_history_${stamp}.json`, 'application/json', content);
+        if (ok) {
+          setToastType('success');
+          setToastMessage(t('settings.downloadHistorySuccess'));
+          setToastVisible(true);
+        }
+        return;
+      }
+
+      const delimiter = ',';
+      const header = ['timestamp', 'timestamp_iso', 'content', 'level', 'type', 'contentType', 'country', 'wifi_ssid', 'wifi_security', 'wifi_password', 'wifi_hidden'];
+      const csvEscape = (v) => {
+        const s = v === null || v === undefined ? '' : String(v);
+        return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = items.map((it) => {
+        const wifi = it?.wifi || null;
+        const ts = it?.timestamp ?? '';
+        const iso = typeof ts === 'number' && Number.isFinite(ts) ? new Date(ts).toISOString() : '';
+        return [
+          ts,
+          iso,
+          it?.content ?? it?.normalized ?? '',
+          it?.level ?? '',
+          it?.type ?? '',
+          it?.contentType ?? it?.kind ?? '',
+          typeof it?.country === 'string' ? it.country : (it?.country?.label || it?.country?.name || ''),
+          wifi?.ssid ?? '',
+          wifi?.security ?? '',
+          wifi?.password ?? '',
+          wifi?.hidden ? 'true' : 'false',
+        ].map(csvEscape).join(delimiter);
+      });
+      const content = `\ufeffsep=${delimiter}\r\n${[header.join(delimiter), ...rows].join('\r\n')}`;
+      const ok = await downloadContentAsFile(`scan_history_${stamp}.csv`, 'text/csv', content);
+      if (ok) {
+        setToastType('success');
+        setToastMessage(t('settings.downloadHistorySuccess'));
+        setToastVisible(true);
+      }
+    } catch {
+      setToastType('error');
+      setToastMessage(t('share_unavailable'));
+      setToastVisible(true);
+    }
+  };
+
+  const toggleAlwaysConfirmLink = async () => {
+    const next = !alwaysConfirmLink;
+    setAlwaysConfirmLink(next);
+    try {
+      await AsyncStorage.setItem(ALWAYS_CONFIRM_LINK_KEY, next ? 'true' : 'false');
+    } catch {}
+  };
+
+  const toggleScanHaptics = async () => {
+    const next = !scanHapticsEnabled;
+    setScanHapticsEnabled(next);
+    try {
+      await AsyncStorage.setItem(SCAN_HAPTICS_ENABLED_KEY, next ? 'true' : 'false');
+    } catch {}
+  };
+
   const languages = [
    
     { code: 'tr', label: 'Türkçe', flag: '🇹🇷' },
@@ -119,7 +387,7 @@ export default function SettingsScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: dark ? '#0b0f14' : '#e9edf3', justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: dark ? '#e6edf3' : '#0b1220' }}>{t('common.loading')}</Text>
+        <ActivityIndicator size="large" color={dark ? '#67e8f9' : '#0284c7'} />
       </View>
     );
   }
@@ -203,6 +471,7 @@ export default function SettingsScreen() {
         </View>
       )}
 
+     
       {/* Tema Seçimi */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -252,9 +521,126 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-     
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>💬</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+            {t('settings.support')}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.preferenceRow,
+            { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
+          ]}
+          onPress={() => setFeedbackVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.preferenceEmoji}>✉️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.preferenceTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.sendFeedback')}</Text>
+            <Text style={[styles.preferenceDesc, { color: dark ? '#8b949e' : '#57606a' }]}>{t('settings.sendFeedbackSubtitle')}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
 
-       {/* Dil Seçimi */}
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🔗</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+            {t('settings.linkPrefs')}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.preferenceRow,
+            { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
+          ]}
+          onPress={toggleAlwaysConfirmLink}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.preferenceEmoji}>❓</Text>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[styles.preferenceTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.alwaysConfirmLink')}</Text>
+            <Text style={[styles.preferenceDesc, { color: dark ? '#8b949e' : '#57606a' }]}>{t('settings.alwaysConfirmLinkSubtitle')}</Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: alwaysConfirmLink ? '#22c55e' : (dark ? '#30363d' : '#cbd5e1') }]}>
+            <View style={[styles.toggleKnob, { transform: [{ translateX: alwaysConfirmLink ? 18 : 0 }] }]} />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+       <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>📷</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+            {t('settings.scanPrefs')}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.preferenceRow,
+            { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
+          ]}
+          onPress={toggleScanHaptics}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.preferenceEmoji}>📳</Text>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[styles.preferenceTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.scanHaptics')}</Text>
+            <Text style={[styles.preferenceDesc, { color: dark ? '#8b949e' : '#57606a' }]}>{t('settings.scanHapticsSubtitle')}</Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: scanHapticsEnabled ? '#22c55e' : (dark ? '#30363d' : '#cbd5e1') }]}>
+            <View style={[styles.toggleKnob, { transform: [{ translateX: scanHapticsEnabled ? 18 : 0 }] }]} />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+     
+ 
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🕘</Text>
+          <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
+            {t('settings.historyTools')}
+          </Text>
+        </View>
+        <View style={{ gap: 12 }}>
+          <TouchableOpacity
+            style={[
+              styles.preferenceRow,
+              { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
+            ]}
+            onPress={() => setExportModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.preferenceEmoji}>📤</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.preferenceTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.exportHistory')}</Text>
+              <Text style={[styles.preferenceDesc, { color: dark ? '#8b949e' : '#57606a' }]}>{t('settings.exportHistorySubtitle')}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.preferenceRow,
+              { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
+            ]}
+            onPress={() => setClearHistoryModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.preferenceEmoji}>🗑️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.preferenceTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.clearHistoryShortcut')}</Text>
+              <Text style={[styles.preferenceDesc, { color: dark ? '#8b949e' : '#57606a' }]}>{t('settings.clearHistorySubtitle')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Dil Seçimi */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌍</Text>
@@ -368,7 +754,6 @@ export default function SettingsScreen() {
           {t('settings.version')}: {Constants?.expoConfig?.version ?? '—'}
         </Text>
       </View>
-      <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} />
       <Modal
         visible={infoModal.visible}
         animationType="fade"
@@ -392,7 +777,118 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        visible={exportModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setExportModalVisible(false)}
+      >
+        <View style={styles.infoOverlay}>
+          <View style={[styles.infoCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoIcon}>📤</Text>
+              <Text style={[styles.infoTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{t('settings.exportHistory')}</Text>
+            </View>
+            <Text style={[styles.infoMessage, { color: dark ? '#94a3b8' : '#475569' }]}>{t('settings.exportHistoryChoose')}</Text>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#2563eb' }]}
+              onPress={async () => {
+                setExportModalVisible(false);
+                await exportHistory('json');
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('settings.exportHistoryJson')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#0ea5e9' }]}
+              onPress={async () => {
+                setExportModalVisible(false);
+                await exportHistory('csv');
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('settings.exportHistoryCsv')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#16a34a' }]}
+              onPress={async () => {
+                setExportModalVisible(false);
+                await downloadHistory('json');
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('settings.downloadHistoryJson')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: '#22c55e' }]}
+              onPress={async () => {
+                setExportModalVisible(false);
+                await downloadHistory('csv');
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('settings.downloadHistoryCsv')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.infoCta, { backgroundColor: dark ? '#334155' : '#64748b' }]}
+              onPress={() => setExportModalVisible(false)}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.infoCtaText}>{t('actions.cancel') || 'Vazgeç'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={clearHistoryModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <BlurView
+            intensity={60}
+            tint={dark ? 'dark' : 'light'}
+            style={[
+              styles.modalCard,
+              { backgroundColor: dark ? 'rgba(22,27,34,0.85)' : 'rgba(255,255,255,0.9)', borderColor: dark ? '#30363d' : '#e1e4e8' }
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Ionicons name="trash-outline" size={22} color={dark ? '#ff6b6b' : '#d00000'} />
+              <Text style={[styles.modalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('history.clearConfirmTitle')}</Text>
+            </View>
+            <Text style={[styles.modalMessage, { color: dark ? '#8b98a5' : '#3b4654' }]}>{t('history.clearConfirmMessage')}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtnOutline, { borderColor: dark ? '#8b98a5' : '#7a8699' }]}
+                onPress={() => setClearHistoryModalVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalBtnOutlineText, { color: dark ? '#c9d1d9' : '#24292f' }]}>{t('actions.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: dark ? '#d00000' : '#d00000' }]}
+                onPress={async () => {
+                  setClearHistoryModalVisible(false);
+                  const ok = await clearHistory();
+                  if (ok) {
+                    setToastType('success');
+                    setToastMessage(t('settings.historyCleared'));
+                    setToastVisible(true);
+                  } else {
+                    setToastType('error');
+                    setToastMessage(t('share_unavailable'));
+                    setToastVisible(true);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnText}>{t('actions.delete')}</Text>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </View>
+      </Modal>
       </ScrollView>
+
+      <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} dark={dark} style={{ bottom: Math.max(insets.bottom + 72, 72) }} />
 
       <StatusModal
         visible={statusModal.visible}
@@ -400,6 +896,12 @@ export default function SettingsScreen() {
         message={statusModal.message}
         type={statusModal.type}
         onClose={() => setStatusModal(prev => ({ ...prev, visible: false }))}
+      />
+
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+        onFeedbackGiven={markFeedbackGiven}
       />
 
     </View>  
@@ -653,5 +1155,101 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1
+  },
+  preferenceEmoji: {
+    fontSize: 20,
+    width: 28,
+    textAlign: 'center'
+  },
+  preferenceTitle: {
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  preferenceDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4
+  },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    padding: 4
+  },
+  toggleKnob: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#fff'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24
+  },
+  modalCard: {
+    width: '92%',
+    maxWidth: 480,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    overflow: 'hidden'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap'
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700'
+  },
+  modalMessage: {
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 20
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap'
+  },
+  modalBtnOutline: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 120,
+    alignItems: 'center'
+  },
+  modalBtnOutlineText: {
+    fontWeight: '700',
+    fontSize: 14
+  },
+  modalBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    minWidth: 120,
+    alignItems: 'center'
+  },
+  modalBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14
   }
 });

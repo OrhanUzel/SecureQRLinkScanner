@@ -63,27 +63,21 @@ export function useAdManager() {
           });
         };
 
-        // Waterfall: Rewarded -> RewardedInterstitial -> Interstitial
+        // Waterfall basitleştirildi: Sadece Rewarded ve fallback olarak Interstitial
+        // Çoklu denemeler iOS'ta UI donmalarına ve performans sorunlarına yol açabiliyor.
         try {
           await loadAdPromise(RewardedAd, rewardedUnitId, 'rewarded');
           console.log('Loaded Rewarded Ad');
           return true;
         } catch (e1) {
-          console.log('Rewarded failed, trying RewardedInterstitial', e1);
+          console.log('Rewarded failed, trying Interstitial', e1);
           try {
-            await loadAdPromise(RewardedInterstitialAd, rewardedInterstitialUnitId, 'rewarded_interstitial');
-            console.log('Loaded RewardedInterstitial Ad');
+            await loadAdPromise(InterstitialAd, interstitialUnitId, 'interstitial');
+            console.log('Loaded Interstitial Ad');
             return true;
           } catch (e2) {
-            console.log('RewardedInterstitial failed, trying Interstitial', e2);
-            try {
-              await loadAdPromise(InterstitialAd, interstitialUnitId, 'interstitial');
-               console.log('Loaded Interstitial Ad');
-               return true;
-            } catch (e3) {
-              console.log('All ads failed to load', e3);
-              return false;
-            }
+            console.log('All ads failed to load', e2);
+            return false;
           }
         }
       } catch (err) {

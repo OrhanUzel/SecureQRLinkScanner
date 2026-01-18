@@ -202,7 +202,15 @@ function RootNavigator() {
           <Stack.Screen name="CreateQR" component={CreateQrScreen} options={{ title: t('scan.create') }} />
           <Stack.Screen name="History" component={HistoryScreen} options={{ title: t('history.title') }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings.title') }} />
-          <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen
+            name="Paywall"
+            component={PaywallScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+              animation: Platform.OS === 'android' ? 'slide_from_bottom' : 'default',
+            }}
+          />
           <Stack.Screen name="Disclaimer" component={DisclaimerScreen} options={{ title: t('disclaimer.title'), presentation: 'modal' }} />
         </Stack.Navigator>
 

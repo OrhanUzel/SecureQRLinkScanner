@@ -235,7 +235,7 @@ const HistoryItem = React.memo(({
 
 // Memoized Header Component
 const HistoryListHeader = React.memo(() => (
-  <View style={{ marginBottom: 12 }}>
+  <View style={{ marginBottom: 8 }}>
      <AdvancedAdCard placement="history_top" />
   </View>
 ));
@@ -252,6 +252,16 @@ export default function HistoryScreen() {
   const [toastMsg, setToastMsg] = useState('');
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
+
+  const getAlwaysConfirmLink = async () => {
+    try {
+      const v = await AsyncStorage.getItem(ALWAYS_CONFIRM_LINK_KEY);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  };
 
   const deleteItem = useCallback(async (index) => {
     try {
@@ -279,9 +289,15 @@ export default function HistoryScreen() {
   }, []);
 
   const clear = useCallback(async () => {
-    await AsyncStorage.removeItem('scan_history');
-    setItems([]);
-  }, []);
+    try {
+      await AsyncStorage.removeItem('scan_history');
+      setItems([]);
+      setToastMsg(t('settings.historyCleared') || 'Geçmiş temizlendi');
+      setToastVisible(true);
+    } catch (err) {
+      Alert.alert('Hata', 'Geçmiş temizlenemedi: ' + err.message);
+    }
+  }, [t]);
 
   const confirmClearAll = useCallback(() => {
     if (!items.length) return;
@@ -353,9 +369,18 @@ export default function HistoryScreen() {
     }
   }, []);
 
-  const handleOpenLink = useCallback((url) => {
-    setPendingUrl(url);
-    setConfirmVisible(true);
+  const handleOpenLink = useCallback(async (url) => {
+    const shouldConfirm = await getAlwaysConfirmLink();
+    if (shouldConfirm) {
+      setPendingUrl(url);
+      setConfirmVisible(true);
+      return;
+    }
+    try {
+      await openExternalUrl(url);
+    } catch (e) {
+      Alert.alert('Hata', 'Link açılamadı: ' + e.message);
+    }
   }, []);
 
   const renderItem = useCallback(({ item, index }) => (
@@ -545,7 +570,7 @@ const styles = StyleSheet.create({
   itemHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   itemContent: { fontWeight: '600', fontSize: 15, marginBottom: 4, flex: 1, flexShrink: 1 },
   deleteBtn: { padding: 6, borderRadius: 8, alignSelf: 'flex-start' },
-  listContent: { paddingHorizontal: 20, paddingTop: 20 },
+  listContent: { paddingHorizontal: 20, paddingTop: 8 },
   itemRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 4 },
   levelBadge: { 
     flexDirection: 'row', 

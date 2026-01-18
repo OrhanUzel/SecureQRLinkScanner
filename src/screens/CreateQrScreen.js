@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Platform, ScrollView, ActivityIndicator, Alert, useWindowDimensions, Keyboard, Image, Modal, Animated, InteractionManager } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { styles } from './CreateQrScreen.styles';
 import { Ionicons, Fontisto } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import { useInterstitialAd } from '../hooks/useInterstitialAd';
 import QrGenerationService from '../utils/QrGenerationService';
 import CreateQrStateManager from '../utils/CreateQrStateManager';
 import IconRenderer from '../components/IconRenderer';
+import { debugLog } from '../utils/events';
 import QrPreviewSection from '../components/qr/QrPreviewSection';
 import IconPickerModal from '../components/qr/IconPickerModal';
 import ColorPickerModal from '../components/qr/ColorPickerModal';
@@ -214,7 +215,8 @@ export default function CreateQrScreen() {
   const qrService = useMemo(() => new QrGenerationService(), []);
 
   // --- Ad Logic (Hook) ---
-  const { adLoaded, showAd, preloadAd } = useAdManager();
+  const rewardedEnabled = Platform.OS !== 'ios';
+  const { showAd } = useAdManager(rewardedEnabled);
 
 
   // --- Derived State & Logic ---
@@ -243,6 +245,19 @@ export default function CreateQrScreen() {
   }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
 
   const gateDesc = useMemo(() => {
+    if (Platform.OS === 'ios') {
+      if (unlockState.pendingTemplateKey) {
+        const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
+        const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
+        return t('template_unlock_desc_premium', { template: label }) || 'Bu özellik Premium ile açılır.';
+      }
+      if (unlockState.pendingQrType) return t('qr_type_unlock_desc_premium') || 'Bu QR tipini kullanmak için Premium olun.';
+      if (unlockState.pendingCustomMode === 'barcode_generate') {
+        return t('barcode_unlock_desc_premium') || 'Barkod oluşturmak için Premium olun.';
+      }
+      if (unlockState.pendingCustomMode) return t('custom_qr_unlock_desc_premium') || 'Bu stil Premium ile açılır.';
+      return t('premium_unlock_desc') || 'Premium ile tüm kilitler açılır.';
+    }
     if (unlockState.pendingTemplateKey) {
       const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
       const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
@@ -254,6 +269,31 @@ export default function CreateQrScreen() {
     }
     return t('custom_qr_unlock_desc') || 'Logo ve çerçeve eklemek için Premium olun ya da ödüllü reklam izleyin.';
   }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
+
+  const premiumBenefits = useMemo(() => {
+    const items = [];
+
+    if (unlockState.pendingQrType) {
+      items.push(t('premium_benefit.qr_types') || 'Wi‑Fi, Telefon, E‑posta ve SMS QR');
+    }
+
+    if (unlockState.pendingTemplateKey) {
+      items.push(t('premium_benefit.templates') || 'Hazır şablonlar');
+    }
+
+    if (unlockState.pendingCustomMode === 'barcode_generate') {
+      items.push(t('premium_benefit.barcodes') || 'Barkod oluşturma');
+    }
+
+    if (unlockState.pendingCustomMode && unlockState.pendingCustomMode !== 'barcode_generate') {
+      items.push(t('premium_benefit.custom_styles') || 'Özel QR stilleri (logo, çerçeve, yazı)');
+    }
+
+    items.push(t('premium_benefit.icons') || 'Özel ikonlar ve ikonlu QR');
+    items.push(t('premium_benefit.remove_ads') || 'Reklamları kaldır');
+
+    return items;
+  }, [t, unlockState.pendingCustomMode, unlockState.pendingQrType, unlockState.pendingTemplateKey]);
 
   const isUrlQrType = useMemo(
     () => qrSettings.symbolType === 'qr' && qrSettings.type === 'url',
@@ -636,10 +676,14 @@ export default function CreateQrScreen() {
     updateUnlock({ pendingQrType: null });
   }, [ensureTypeAccess]);
 
+  const dismissCustomGate = useCallback(() => {
+    updateUi({ customGateVisible: false, unlockModalVisible: false });
+  }, [updateUi]);
+
   const closeCustomGate = useCallback(() => {
     updateUi({ customGateVisible: false, rewardUnlocked: false, unlockModalVisible: false, customGateLoading: false });
     updateUnlock({ pendingCustomMode: null, pendingQrType: null, pendingTemplateKey: null });
-  }, []);
+  }, [updateUi, updateUnlock]);
 
   const applyRewardUnlock = useCallback(() => {
     setUnlockState((prev) => {
@@ -682,11 +726,52 @@ export default function CreateQrScreen() {
     updateUi({ toast: { visible: true, type: 'success', message: t('custom_qr_unlocked') || 'Bu seçenek açıldı!' } });
   }, [unlockState.pendingCustomMode, unlockState.pendingQrType, unlockState.pendingTemplateKey, closeCustomGate, t, updateQr, updateUi]);
 
+  const runAdUnlockFlow = useCallback(async () => {
+    debugLog('CreateQrScreen.unlock', 'Ad flow starting', {
+      pendingCustomMode: unlockState.pendingCustomMode,
+      pendingQrType: unlockState.pendingQrType,
+      pendingTemplateKey: unlockState.pendingTemplateKey,
+    });
+
+    const res = await showAd();
+    debugLog('CreateQrScreen.unlock', 'showAd resolved', res);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    InteractionManager.runAfterInteractions(() => {
+      debugLog('CreateQrScreen.unlock', 'After interactions, applying result', res);
+      updateUi({ customGateLoading: false });
+
+      if (res.ok) {
+        applyRewardUnlock();
+      } else {
+        const error = res.error;
+        const isNotReady = error === 'not_ready';
+        const message = isNotReady
+          ? (t('ads.modal.notReady') || 'Reklam şu anda hazır değil. Lütfen biraz bekleyin ve tekrar deneyin.')
+          : (t('ads.modal.generic') || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
+
+        updateUi({ toast: { visible: true, type: 'error', message } });
+      }
+    });
+  }, [applyRewardUnlock, showAd, t, unlockState.pendingCustomMode, unlockState.pendingQrType, unlockState.pendingTemplateKey, updateUi]);
+
   const handleWatchAdUnlock = useCallback(async () => {
     if (uiState.customGateLoading) return;
+
+    debugLog('CreateQrScreen.unlock', 'Watch ad unlock tapped', {
+      pendingCustomMode: unlockState.pendingCustomMode,
+      pendingQrType: unlockState.pendingQrType,
+      pendingTemplateKey: unlockState.pendingTemplateKey,
+    });
+
+    if (!rewardedEnabled) {
+      handlePremiumNavigation();
+      return;
+    }
     
     const netState = await NetInfo.fetch();
     if (!netState.isConnected) {
+      debugLog('CreateQrScreen.unlock', 'Offline, aborting ad show', netState, 'warn');
       updateUi({
         adInfoModal: {
           visible: true,
@@ -697,44 +782,11 @@ export default function CreateQrScreen() {
       return;
     }
 
+    debugLog('CreateQrScreen.unlock', 'Dismissing gate before ad show');
     updateUi({ customGateLoading: true });
-
-    let finished = false;
-    let unlocked = false;
-
-    const timeoutId = setTimeout(async () => {
-      if (finished || unlocked) return;
-      const state = await NetInfo.fetch();
-      if (state.isConnected) {
-        unlocked = true;
-        applyRewardUnlock();
-      }
-    }, 8000);
-
-    const res = await showAd();
-
-    finished = true;
-    clearTimeout(timeoutId);
-    updateUi({ customGateLoading: false });
-
-    if (unlocked) {
-      return;
-    }
-
-    if (res.ok) {
-      unlocked = true;
-      applyRewardUnlock();
-    } else {
-      const error = res.error;
-      const isNotReady = error === 'not_ready';
-      const title = t('ads.modal.title') || 'Reklam';
-      const message = isNotReady
-         ? (t('ads.modal.notReady') || 'Reklam şu anda hazır değil. Lütfen biraz bekleyin ve tekrar deneyin.')
-         : (t('ads.modal.generic') || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
-      
-      updateUi({ adInfoModal: { visible: true, title, message } });
-    }
-  }, [uiState.customGateLoading, t, showAd, applyRewardUnlock, updateUi]);
+    dismissCustomGate();
+    runAdUnlockFlow();
+  }, [dismissCustomGate, handlePremiumNavigation, rewardedEnabled, runAdUnlockFlow, t, uiState.customGateLoading, unlockState.pendingCustomMode, unlockState.pendingQrType, unlockState.pendingTemplateKey, updateUi]);
 
   const handlePremiumNavigation = useCallback(async () => {
     const state = await NetInfo.fetch();
@@ -1647,7 +1699,7 @@ export default function CreateQrScreen() {
                       onPress={() => {
                         if (!uiState.premium && !templateUnlocked) {
                           updateUnlock({ pendingTemplateKey: tpl.key, pendingCustomMode: 'logo_frame' });
-                          updateUi({ customGateVisible: true });
+                          openCustomGate();
                           return;
                         }
                         updateUi({ input: localizedExample, error: null });
@@ -2089,7 +2141,11 @@ export default function CreateQrScreen() {
             )}
 
             {!uiState.premium && qrSettings.customMode !== 'none' && !isModeUnlocked(qrSettings.customMode) && (
-              <Text style={[styles.customHint, { color: dark ? '#94a3b8' : '#475569' }]}>{t('custom_qr_locked_hint') || 'Premium üye olun ya da bu seçenek için ödüllü reklam izleyin.'}</Text>
+              <Text style={[styles.customHint, { color: dark ? '#94a3b8' : '#475569' }]}>
+                {rewardedEnabled
+                  ? (t('custom_qr_locked_hint') || 'Premium üye olun ya da bu seçenek için ödüllü reklam izleyin.')
+                  : (t('custom_qr_locked_hint_premium') || 'Bu seçenek için Premium olun.')}
+              </Text>
             )}
           </View>
           )}
@@ -2226,7 +2282,12 @@ export default function CreateQrScreen() {
       </Modal>
 
       {/* Custom Feature Gate Modal */}
-      <Modal visible={uiState.customGateVisible} animationType="fade" transparent onRequestClose={closeCustomGate}>
+      <Modal
+        visible={uiState.customGateVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeCustomGate}
+      >
         <View style={styles.rewardOverlay}>
           <View style={[styles.rewardCard, { backgroundColor: dark ? '#111827' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
             <TouchableOpacity
@@ -2260,6 +2321,20 @@ export default function CreateQrScreen() {
               <Text style={[styles.rewardTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>{gateTitle}</Text>
             </View>
             <Text style={[styles.rewardSubtitle, { color: dark ? '#94a3b8' : '#475569' }]}>{gateDesc}</Text>
+
+            {premiumBenefits.length > 0 && (
+              <View style={{ marginTop: 12, marginBottom: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: dark ? '#1f2937' : '#e2e8f0', backgroundColor: dark ? 'rgba(15,23,42,0.6)' : 'rgba(241,245,249,0.65)' }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: dark ? '#e5e7eb' : '#0f172a', marginBottom: 6 }}>
+                  {t('premium_benefits_title') || 'Premium ile'}
+                </Text>
+                {premiumBenefits.map((item, idx) => (
+                  <View key={`${idx}-${item}`} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                    <Ionicons name="checkmark-circle" size={16} color={dark ? '#22c55e' : '#16a34a'} style={{ marginRight: 8 }} />
+                    <Text style={{ flex: 1, fontSize: 12, color: dark ? '#cbd5f5' : '#0b1220' }}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             
             { (
             <TouchableOpacity
@@ -2272,21 +2347,23 @@ export default function CreateQrScreen() {
             </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[styles.rewardCta, { backgroundColor: dark ? '#166534' : '#16a34a', borderColor: dark ? '#22c55e' : '#16a34a', borderWidth: 1 }]}
-              onPress={handleWatchAdUnlock}
-              disabled={uiState.customGateLoading}
-              activeOpacity={0.85}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {uiState.customGateLoading ? (
-                  <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                ) : (
-                  <Ionicons name={uiState.rewardUnlocked ? 'checkmark-circle' : 'play-circle-outline'} size={20} color="#fff" style={{ marginRight: 8 }} />
-                )}
-                <Text style={styles.rewardCtaText}>{uiState.customGateLoading ? (t('reward.loading') || 'Ödüllü reklam yükleniyor...') : uiState.rewardUnlocked ? (t('reward.unlocked') || 'Kilit açıldı!') : (t('custom_qr_watch_ad') || 'Ödüllü reklam izle')}</Text>
-              </View>
-            </TouchableOpacity>
+            {rewardedEnabled && (
+              <TouchableOpacity
+                style={[styles.rewardCta, { backgroundColor: dark ? '#166534' : '#16a34a', borderColor: dark ? '#22c55e' : '#16a34a', borderWidth: 1 }]}
+                onPress={handleWatchAdUnlock}
+                disabled={uiState.customGateLoading}
+                activeOpacity={0.85}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {uiState.customGateLoading ? (
+                    <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+                  ) : (
+                    <Ionicons name={uiState.rewardUnlocked ? 'checkmark-circle' : 'play-circle-outline'} size={20} color="#fff" style={{ marginRight: 8 }} />
+                  )}
+                  <Text style={styles.rewardCtaText}>{uiState.customGateLoading ? (t('reward.loading') || 'Ödüllü reklam yükleniyor...') : uiState.rewardUnlocked ? (t('reward.unlocked') || 'Kilit açıldı!') : (t('custom_qr_watch_ad') || 'Ödüllü reklam izle')}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>

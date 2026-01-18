@@ -82,8 +82,19 @@ export default function LinkScanScreen() {
   const lastHandledSharedUrl = useRef(null);
   const isShareSession = useRef(false); // sadece paylaşım menüsünden gelinen senaryoda otomatik tara
   const lastInvalidToastValue = useRef(null);
+  const pendingLinkAction = useRef({ url: null, shouldConfirm: true });
   
   // handledInitialUrl ref'i kaldırıldı, yerine yukarıdaki global değişken kullanılacak.
+  const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
+
+  const getAlwaysConfirmLink = async () => {
+    try {
+      const v = await AsyncStorage.getItem(ALWAYS_CONFIRM_LINK_KEY);
+      return v === null ? true : v === 'true';
+    } catch {
+      return true;
+    }
+  };
 
   const showInvalidUrlToast = () => {
     setToastType('error');
@@ -357,21 +368,40 @@ export default function LinkScanScreen() {
 
   const openLink = async () => {
     if (result?.normalized && result.isUrl) {
+      const shouldConfirm = await getAlwaysConfirmLink();
+      pendingLinkAction.current = { url: result.normalized, shouldConfirm };
       setPendingUrl(result.normalized);
       const triggered = await registerLinkOpen();
       if (!triggered) {
-        setConfirmVisible(true);
+        pendingLinkAction.current = { url: null, shouldConfirm: true };
+        if (shouldConfirm) {
+          setConfirmVisible(true);
+        } else {
+          try {
+            await openExternalUrl(result.normalized);
+          } catch {}
+          setPendingUrl(null);
+        }
       }
     }
   };
 
   const handleFeedbackClose = () => {
     closeFeedback();
-    if (pendingUrl) {
-      setTimeout(() => {
+    const act = pendingLinkAction.current;
+    if (!act?.url) return;
+    setTimeout(async () => {
+      if (act.shouldConfirm) {
         setConfirmVisible(true);
-      }, 300);
-    }
+      } else {
+        try {
+          await openExternalUrl(act.url);
+        } catch {}
+        setConfirmVisible(false);
+        setPendingUrl(null);
+      }
+      pendingLinkAction.current = { url: null, shouldConfirm: true };
+    }, 300);
   };
 
   const vtLink = async () => {
