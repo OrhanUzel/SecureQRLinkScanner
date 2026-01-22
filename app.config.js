@@ -8,8 +8,8 @@ module.exports = {
   expo: {
     name: "Secure QR & Link Scanner",
     slug: "secure-qr-link-scanner",
-    owner: "orhanuzl",
-    version: "1.6.1",
+    owner: "orhanuzell",
+    version: "1.7.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -17,7 +17,7 @@ module.exports = {
       apiBaseUrl: "https://riskapi.orhanuzel.com.tr",
       adsFallbackToTestIds: process.env.EXPO_PUBLIC_ENABLE_AD_TEST_FALLBACK === 'true',
       eas: {
-        projectId: "9a2c9943-2d49-4c92-8d4b-4584e0d66b56"
+        projectId: "33ff4554-c1e4-4082-bba2-5a6914037696"
       },
       adUnits: {
         androidBanner: process.env.ANDROID_BANNER_ID,
@@ -65,11 +65,15 @@ module.exports = {
       }
     },
     ios: {
+      buildNumber: "6",
       supportsTablet: true,
       bundleIdentifier: "com.orhanuzel.secureqrlinkscanner",
       "appleTeamId": process.env.APPLE_TEAM_ID,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: true,
+        },
         // Fallback to English if locale-specific strings fail
         NSCameraUsageDescription: en.permissions?.camera,
         NSUserTrackingUsageDescription: en.permissions?.tracking,
@@ -78,7 +82,7 @@ module.exports = {
       }
     },
     android: {
-      versionCode: 18,
+      versionCode: 20,
       adaptiveIcon: {
         foregroundImage: "./assets/icon.png",
         backgroundColor: "#ffffff"
@@ -117,6 +121,9 @@ module.exports = {
       [
         "expo-build-properties",
         {
+          android: {
+            usesCleartextTraffic: true,
+          },
           ios: {
             useFrameworks: "static",
             deploymentTarget: "16.0",

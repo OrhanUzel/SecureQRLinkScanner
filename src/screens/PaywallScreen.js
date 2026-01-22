@@ -114,6 +114,24 @@ export default function PaywallScreen() {
             });
           }
         }}
+
+        onRestoreError={(error) => {
+          let message = t('paywall.restoreError');
+          const errStr = error.message || '';
+          
+          if (error.userCancelled) return;
+          
+          if (errStr.includes('pending') || errStr.includes('Pending')) {
+            message = t('paywall.paymentPendingError');
+          }
+
+          setStatusModal({
+            visible: true,
+            title: t('alerts.errorTitle'),
+            message: message,
+            type: 'error'
+          });
+        }}
       />
       
       <StatusModal

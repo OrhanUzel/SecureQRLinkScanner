@@ -221,9 +221,11 @@ function RootNavigator() {
           2. Yasaklı ekranlarda GİZLİ
           3. isFooter={true} ile Safe Area padding otomatik eklenir
       */}
+      {/* 
       {currentRouteName && !HIDDEN_AD_SCREENS.includes(currentRouteName) && (
         <AdBanner isFooter={true} placement="global_footer" />
       )}
+      */}
       
     </View>
   );
@@ -269,9 +271,35 @@ export default function App() {
             // Check for ANY active entitlement, not just 'pro'
             // This is more robust if the user used a different identifier in RevenueCat
             const activeEntitlements = customerInfo?.entitlements?.active || {};
-            const isPro = Object.keys(activeEntitlements).length > 0;
+            const activeKeys = Object.keys(activeEntitlements);
+            const isPro = activeKeys.length > 0;
             
             await AsyncStorage.setItem('premium', isPro ? 'true' : 'false');
+            
+            if (isPro) {
+              // Get the first active entitlement to determine plan details
+              const entitlement = activeEntitlements[activeKeys[0]];
+              const pid = entitlement.productIdentifier.toLowerCase();
+              
+              let type = 'subscription';
+              if (pid.includes('lifetime')) type = 'lifetime';
+              else if (pid.includes('year') || pid.includes('annual')) type = 'yearly';
+              else if (pid.includes('month')) type = 'monthly';
+              else if (pid.includes('week')) type = 'weekly';
+              
+              const info = {
+                type,
+                planName: 'Premium', 
+                purchaseDate: entitlement.latestPurchaseDate,
+                expiryDate: entitlement.expirationDate,
+                identifier: entitlement.productIdentifier
+              };
+              
+              await AsyncStorage.setItem('premium_info', JSON.stringify(info));
+            } else {
+              await AsyncStorage.removeItem('premium_info');
+            }
+
             appEvents.emit('premiumChanged', isPro);
           } catch (e) {
             console.log('Error updating premium status:', e);

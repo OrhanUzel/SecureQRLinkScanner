@@ -1,6 +1,6 @@
 import { getUsomInfo } from '../utils/usomHelper';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, useWindowDimensions, Animated, Share, Keyboard, Modal } from 'react-native';
+import { View, Platform, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, useWindowDimensions, Animated, Share, Keyboard, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
@@ -11,7 +11,6 @@ import { classifyInput, loadBlacklist } from '../utils/classifier';
 import { checkRisk } from '../utils/riskcheck';
 import { openVirusTotalForResult, openExternalUrl } from '../utils/linkActions';
 import { useAppTheme } from '../theme/ThemeContext';
-import ActionButtonsGrid from '../components/ActionButtonsGrid';
 import AdvancedAdCard from '../components/AdvancedAdCard';
 import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
@@ -20,6 +19,7 @@ import ConfirmOpenLinkModal from '../components/ConfirmOpenLinkModal';
 import Toast from '../components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OfflineNotice from '../components/OfflineNotice';
+import { appEvents } from '../utils/events';
 
 // BU DEĞİŞKEN EKLENDİ:
 // Bileşen unmount olsa bile (başka ekrana gidip gelince) hafızada kalması için global tanımladık.
@@ -77,6 +77,35 @@ export default function LinkScanScreen() {
   const [toastType, setToastType] = useState('success');
   const [offlineNoticeHeight, setOfflineNoticeHeight] = useState(0);
   const insets = useSafeAreaInsets();
+
+  const [isPremium, setIsPremium] = useState(false);
+  const [scanCount, setScanCount] = useState(0);
+
+  useEffect(() => {
+    const checkPremium = async () => {
+      try {
+        const v = await AsyncStorage.getItem('premium');
+        setIsPremium(v === 'true');
+      } catch {}
+    };
+    checkPremium();
+
+    const loadScanCount = async () => {
+      try {
+        const v = await AsyncStorage.getItem('link_scan_count');
+        setScanCount(v ? parseInt(v, 10) : 0);
+      } catch {}
+    };
+    loadScanCount();
+
+    const removeListener = appEvents.on('premiumChanged', (status) => {
+      setIsPremium(status === true);
+    });
+
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, []);
   
   const hasHandledSharedLink = useRef(false);
   const lastHandledSharedUrl = useRef(null);
@@ -208,6 +237,24 @@ export default function LinkScanScreen() {
       showInvalidUrlToast();
       return;
     }
+
+    if (Platform.OS === 'ios' && !isPremium) {
+      if (scanCount >= 5) {
+        Alert.alert(
+          t('scan_limit_reached_title'),
+          t('scan_limit_reached_message'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('go_premium'), onPress: () => navigation.navigate('Paywall') }
+          ]
+        );
+        return;
+      }
+      const newCount = scanCount + 1;
+      setScanCount(newCount);
+      AsyncStorage.setItem('link_scan_count', String(newCount));
+    }
+
     Keyboard.dismiss();
     
     setLoading(true);
@@ -275,6 +322,24 @@ export default function LinkScanScreen() {
     showInvalidUrlToast();
     return;
   }
+
+  if (Platform.OS === 'ios' && !isPremium) {
+    if (scanCount >= 5) {
+      Alert.alert(
+        t('scan_limit_reached_title'),
+        t('scan_limit_reached_message'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('go_premium'), onPress: () => navigation.navigate('Paywall') }
+        ]
+      );
+      return;
+    }
+    const newCount = scanCount + 1;
+    setScanCount(newCount);
+    AsyncStorage.setItem('link_scan_count', String(newCount));
+  }
+
   Keyboard.dismiss();
   
   setLoading(true);
@@ -549,7 +614,13 @@ export default function LinkScanScreen() {
         <Text style={styles.buttonText}>{t('actions.scan')}</Text>
       </TouchableOpacity>
 
-      <AdvancedAdCard placement="linkscan_inline" />
+      {!isPremium && (
+         <Text style={{ textAlign: 'center', fontSize: 13, color: dark ? '#94a3b8' : '#64748b', fontWeight: '600' }}>
+            {t('remaining_scans', { count: Math.max(0, 5 - scanCount) })}
+         </Text>
+      )}
+
+      {/* {Platform.OS !== 'ios' && <AdvancedAdCard placement="linkscan_inline" />} */}
 
       {result && (
         <View style={[styles.card, compact ? { padding: 12 } : null, { backgroundColor: dark ? '#10151c' : '#fff', borderColor: dark ? '#1b2330' : '#dde3ea' }]}> 

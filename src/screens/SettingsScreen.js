@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal, Platform, Share, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Modal, Platform, Share, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, LANGUAGE_KEY } from '../i18n';
@@ -19,6 +19,8 @@ import { useFeedbackSystem } from '../hooks/useFeedbackSystem';
 import FeedbackModal from '../components/FeedbackModal';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import Purchases from 'react-native-purchases';
+import { appEvents } from '../utils/events';
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
@@ -28,6 +30,7 @@ export default function SettingsScreen() {
   const compact = width < 360 || height < 640;
   const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [consentInfo, setConsentInfo] = useState(null);
   const [premium, setPremium] = useState(false);
   const [premiumInfo, setPremiumInfo] = useState(null);
@@ -41,10 +44,19 @@ export default function SettingsScreen() {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [clearHistoryModalVisible, setClearHistoryModalVisible] = useState(false);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [premiumLockModalVisible, setPremiumLockModalVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
   const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
   const SCAN_HAPTICS_ENABLED_KEY = 'scan_haptics_enabled';
+
+  const handlePremiumFeature = (callback) => {
+    if (premium) {
+      callback();
+    } else {
+      setPremiumLockModalVisible(true);
+    }
+  };
 
   useEffect(() => {
     loadSettings();
@@ -66,6 +78,73 @@ export default function SettingsScreen() {
       return;
     }
     navigation.navigate('Paywall');
+  };
+
+  const handleRestore = async () => {
+    setIsRestoring(true);
+    try {
+      const customerInfo = await Purchases.restorePurchases();
+      const activeEntitlements = customerInfo?.entitlements?.active || {};
+      const activeKeys = Object.keys(activeEntitlements);
+
+      if (activeKeys.length > 0) {
+        const entitlement = activeEntitlements[activeKeys[0]];
+        await AsyncStorage.setItem('premium', 'true');
+        
+        const pid = entitlement.productIdentifier.toLowerCase();
+        let type = 'subscription';
+        if (pid.includes('lifetime')) type = 'lifetime';
+        else if (pid.includes('year') || pid.includes('annual')) type = 'yearly';
+        else if (pid.includes('month')) type = 'monthly';
+        else if (pid.includes('week')) type = 'weekly';
+
+        const info = {
+          type,
+          planName: t('paywall.premiumAccess'),
+          purchaseDate: entitlement.latestPurchaseDate,
+          expiryDate: entitlement.expirationDate
+        };
+        
+        await AsyncStorage.setItem('premium_info', JSON.stringify(info));
+        setPremium(true);
+        setPremiumInfo(info);
+        appEvents.emit('premiumChanged', true);
+
+        setStatusModal({
+          visible: true,
+          title: t('paywall.restoreSuccessTitle'),
+          message: t('paywall.restoreSuccessMessage'),
+          type: 'success'
+        });
+      } else {
+        setStatusModal({
+          visible: true,
+          title: t('paywall.restoreEmptyTitle'),
+          message: t('paywall.restoreEmptyMessage'),
+          type: 'info'
+        });
+      }
+    } catch (e) {
+      let message = t('paywall.restoreError');
+      const errStr = e.message || '';
+      
+      if (e.userCancelled) {
+        return;
+      }
+      
+      if (errStr.includes('pending') || errStr.includes('Pending')) {
+        message = t('paywall.paymentPendingError') || t('paywall.restoreError');
+      }
+
+      setStatusModal({
+        visible: true,
+        title: t('alerts.errorTitle'),
+        message: message,
+        type: 'error'
+      });
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   const loadSettings = async () => {
@@ -354,19 +433,23 @@ export default function SettingsScreen() {
   };
 
   const toggleAlwaysConfirmLink = async () => {
-    const next = !alwaysConfirmLink;
-    setAlwaysConfirmLink(next);
-    try {
-      await AsyncStorage.setItem(ALWAYS_CONFIRM_LINK_KEY, next ? 'true' : 'false');
-    } catch {}
+    handlePremiumFeature(async () => {
+      const next = !alwaysConfirmLink;
+      setAlwaysConfirmLink(next);
+      try {
+        await AsyncStorage.setItem(ALWAYS_CONFIRM_LINK_KEY, next ? 'true' : 'false');
+      } catch {}
+    });
   };
 
   const toggleScanHaptics = async () => {
-    const next = !scanHapticsEnabled;
-    setScanHapticsEnabled(next);
-    try {
-      await AsyncStorage.setItem(SCAN_HAPTICS_ENABLED_KEY, next ? 'true' : 'false');
-    } catch {}
+    handlePremiumFeature(async () => {
+      const next = !scanHapticsEnabled;
+      setScanHapticsEnabled(next);
+      try {
+        await AsyncStorage.setItem(SCAN_HAPTICS_ENABLED_KEY, next ? 'true' : 'false');
+      } catch {}
+    });
   };
 
   const languages = [
@@ -404,38 +487,119 @@ export default function SettingsScreen() {
       {premium && (
         <View style={styles.section}>
           <LinearGradient
-            colors={dark ? ['#b45309', '#78350f'] : ['#fbbf24', '#d97706']}
+            colors={dark ? ['#881337', '#4c0519'] : ['#fff1f2', '#ffe4e6']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.premiumBanner}
+            style={{
+              borderRadius: 20,
+              padding: 0,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: dark ? '#fb7185' : '#fda4af',
+              position: 'relative'
+            }}
           >
-            <View style={styles.premiumBannerContent}>
-              <View style={styles.premiumIconWrap}>
-                <Text style={styles.premiumIcon}>👑</Text>
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.premiumBannerTitle}>
-                  {t('settings.premium_active_title') || 'Premium Üyesiniz'}
-                </Text>
-                <Text style={styles.premiumBannerSubtitle}>
-                  {premiumInfo?.type === 'lifetime' 
-                    ? (t('settings.plan_lifetime') || 'Lifetime Access')
-                    : (premiumInfo?.type === 'monthly' ? (t('settings.plan_monthly') || 'Monthly Subscription') : (premiumInfo?.type === 'yearly' ? (t('settings.plan_yearly') || 'Yearly Subscription') : (t('settings.plan_premium') || 'Premium Subscription')))}
-                </Text>
-                
-                {premiumInfo?.expiryDate && premiumInfo?.type !== 'lifetime' && (
-                  <Text style={[styles.premiumBannerSubtitle, { fontSize: 12, opacity: 0.9, marginTop: 2 }]}>
-                    {t('settings.expires_on', { date: new Date(premiumInfo.expiryDate).toLocaleDateString() }) || `Expires: ${new Date(premiumInfo.expiryDate).toLocaleDateString()}`}
+            {/* Decorative Background Elements */}
+            <View style={{ position: 'absolute', top: -20, right: -20, opacity: dark ? 0.15 : 0.1 }}>
+              <Ionicons name="trophy" size={140} color={dark ? '#f43f5e' : '#fb7185'} />
+            </View>
+            
+            <View style={{ padding: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                <View style={{ 
+                  width: 44, height: 44, borderRadius: 22, 
+                  backgroundColor: dark ? '#e11d48' : '#f43f5e',
+                  justifyContent: 'center', alignItems: 'center',
+                  marginRight: 12,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 3
+                }}>
+                  <Ionicons name="diamond" size={24} color="#fff" />
+                </View>
+                <View>
+                  <Text style={{ 
+                    fontSize: 18, 
+                    fontWeight: '800', 
+                    color: dark ? '#fff1f2' : '#881337',
+                    letterSpacing: 0.5
+                  }}>
+                    {t('settings.premium_active_title') || 'PREMIUM ÜYE'}
                   </Text>
-                )}
-
-                <View style={styles.premiumBadge}>
-                  <Text style={styles.premiumBadgeText}>
-                    {premiumInfo?.type === 'lifetime'
-                      ? (t('settings.unlimited_access') || 'Unlimited Access')
-                      : (t('settings.premium_active_label') || 'Subscription Active')}
+                  <Text style={{ 
+                    fontSize: 13, 
+                    color: dark ? '#fda4af' : '#e11d48',
+                    fontWeight: '600'
+                  }}>
+                    {t('settings.premium_active_subtitle') || 'Tüm özellikler aktif'}
                   </Text>
                 </View>
+              </View>
+
+              <View style={{ 
+                backgroundColor: dark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)',
+                borderRadius: 16,
+                padding: 16,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <View>
+                  <Text style={{ 
+                    fontSize: 12, 
+                    color: dark ? '#fecdd3' : '#9f1239',
+                    marginBottom: 4,
+                    fontWeight: '600',
+                    textTransform: 'uppercase'
+                  }}>
+                    {t('settings.current_plan') || 'MEVCUT PLAN'}
+                  </Text>
+                  <Text style={{ 
+                    fontSize: 20, 
+                    fontWeight: '800', 
+                    color: dark ? '#fff' : '#881337' 
+                  }}>
+                    {premiumInfo?.type === 'lifetime' 
+                      ? (t('settings.plan_lifetime') || 'Ömür Boyu')
+                      : (premiumInfo?.type === 'monthly' 
+                          ? (t('settings.plan_monthly') || 'Aylık Plan') 
+                          : (premiumInfo?.type === 'yearly' 
+                              ? (t('settings.plan_yearly') || 'Yıllık Plan') 
+                              : (premiumInfo?.type === 'weekly' 
+                                  ? (t('settings.plan_weekly') || 'Haftalık Plan')
+                                  : (t('settings.plan_premium') || 'Premium Abonelik'))))}
+                  </Text>
+                </View>
+                
+                {premiumInfo?.type !== 'lifetime' && (
+                  <View style={{ alignItems: 'flex-end' }}>
+                     <Text style={{ 
+                      fontSize: 12, 
+                      color: dark ? '#fecdd3' : '#9f1239',
+                      marginBottom: 4,
+                      fontWeight: '600'
+                    }}>
+                      {t('settings.renews_on') || 'Yenilenme'}
+                    </Text>
+                    <Text style={{ 
+                      fontSize: 14, 
+                      fontWeight: '700', 
+                      color: dark ? '#fff' : '#881337' 
+                    }}>
+                       {premiumInfo?.expiryDate ? new Date(premiumInfo.expiryDate).toLocaleDateString() : '-'}
+                    </Text>
+                  </View>
+                )}
+                 {premiumInfo?.type === 'lifetime' && (
+                  <View style={{ 
+                    paddingHorizontal: 10, paddingVertical: 4, 
+                    backgroundColor: dark ? '#f43f5e' : '#e11d48', 
+                    borderRadius: 8 
+                  }}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>∞ {t('settings.infinite') || 'SONSUZ'}</Text>
+                  </View>
+                )}
               </View>
             </View>
           </LinearGradient>
@@ -443,35 +607,89 @@ export default function SettingsScreen() {
       )}
 
       {/* Premium Upsell (Only if NOT premium) */}
-      {!premium && (//ios kontrolü buradaydı 
+      {!premium && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionIcon, { fontSize: 20 }]}>🌟</Text>
-            <Text style={[styles.sectionTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('settings.premiumTitle')}</Text>
-          </View>
-          <View style={{
-            padding: 16,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: dark ? '#30363d' : '#e1e4e8',
-            backgroundColor: dark ? '#161b22' : '#ffffff'
-          }}>
-            <Text style={{ color: dark ? '#8b949e' : '#57606a', fontSize: 13 }}>
-              {t('settings.premiumDesc')}
-            </Text>
+          <LinearGradient
+            colors={dark ? ['#4c1d95', '#2e1065'] : ['#7c3aed', '#5b21b6']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 24,
+              padding: 24,
+              position: 'relative',
+              overflow: 'hidden',
+              shadowColor: "#7c3aed",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 8,
+              marginBottom: 8
+            }}
+          >
+            {/* Background Decor */}
+            <View style={{ position: 'absolute', top: -30, right: -30, opacity: 0.15, transform: [{ rotate: '15deg' }] }}>
+               <Ionicons name="diamond" size={160} color="white" />
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 }}>
+               <View style={{ 
+                 width: 48, height: 48, borderRadius: 14, 
+                 backgroundColor: 'rgba(255,255,255,0.2)', 
+                 justifyContent: 'center', alignItems: 'center', marginRight: 16 
+               }}>
+                 <Text style={{ fontSize: 26 }}>👑</Text>
+               </View>
+               <View style={{ flex: 1 }}>
+                 <Text style={{ fontSize: 20, fontWeight: '800', color: 'white', marginBottom: 6 }}>
+                   {t('settings.premiumTitle')}
+                 </Text>
+                 <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 20 }}>
+                   {t('settings.premiumDesc') || 'Gelişmiş özelliklerin kilidini açın.'}
+                 </Text>
+               </View>
+            </View>
+
             <TouchableOpacity 
-              style={[styles.disclaimerBtn, { backgroundColor: dark ? '#7c3aed' : '#7c3aed', marginTop: 12 }]} 
+              style={{
+                backgroundColor: 'white',
+                borderRadius: 16,
+                paddingVertical: 16,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                elevation: 4
+              }} 
               onPress={handlePremiumNavigation}
-              activeOpacity={0.8}
+              activeOpacity={0.9}
             >
-              <Text style={styles.disclaimerIcon}>🚀</Text>
-              <Text style={styles.disclaimerText}>{t('settings.removeAds')}</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: dark ? '#4c1d95' : '#6d28d9', marginRight: 8 }}>
+                 {t('settings.unlockFeatures') || 'Premium\'a Geç'}
+              </Text>
+              <Ionicons name="arrow-forward-circle" size={20} color={dark ? '#4c1d95' : '#6d28d9'} />
             </TouchableOpacity>
-          </View>
+
+            <TouchableOpacity 
+              style={{ marginTop: 16, alignItems: 'center', padding: 4 }}
+              onPress={handleRestore}
+              activeOpacity={0.7}
+            >
+              <Text style={{ 
+                color: 'rgba(255,255,255,0.7)', 
+                fontSize: 13, 
+                fontWeight: '600'
+              }}>
+                {t('settings.restorePurchases') || 'Satın Almaları Geri Yükle'}
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
         </View>
       )}
 
-     
+
       {/* Tema Seçimi */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -613,7 +831,11 @@ export default function SettingsScreen() {
               styles.preferenceRow,
               { backgroundColor: dark ? '#161b22' : '#ffffff', borderColor: dark ? '#30363d' : '#e1e4e8' }
             ]}
-            onPress={() => setExportModalVisible(true)}
+            onPress={() => {
+              handlePremiumFeature(() => {
+                setExportModalVisible(true);
+              });
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.preferenceEmoji}>📤</Text>
@@ -898,11 +1120,67 @@ export default function SettingsScreen() {
         onClose={() => setStatusModal(prev => ({ ...prev, visible: false }))}
       />
 
+      <Modal
+        transparent={true}
+        visible={isRestoring}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: dark ? '#1e293b' : '#ffffff', padding: 24, borderRadius: 16, alignItems: 'center', gap: 12, minWidth: 160 }}>
+            <ActivityIndicator size="large" color={dark ? '#67e8f9' : '#0284c7'} />
+            <Text style={{ color: dark ? '#e2e8f0' : '#1e293b', fontWeight: '600' }}>
+              {t('settings.processing')}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <FeedbackModal
         visible={feedbackVisible}
         onClose={() => setFeedbackVisible(false)}
         onFeedbackGiven={markFeedbackGiven}
       />
+
+      <Modal
+        visible={premiumLockModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPremiumLockModalVisible(false)}
+      >
+        <View style={styles.infoOverlay}>
+          <View style={[styles.infoCard, { backgroundColor: dark ? '#0b1120' : '#fff', borderColor: dark ? '#1f2937' : '#e2e8f0' }]}>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoIcon}>👑</Text>
+              <Text style={[styles.infoTitle, { color: dark ? '#e6edf3' : '#0f172a' }]}>
+                {t('settings.premium_required_title') || 'Premium Özellik'}
+              </Text>
+            </View>
+            <Text style={[styles.infoMessage, { color: dark ? '#94a3b8' : '#475569' }]}>
+              {t('settings.premium_required_message') || 'Bu özelliği kullanmak için Premium üyeliğe geçin.'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.infoCta, { backgroundColor: dark ? '#334155' : '#e2e8f0', flex: 1 }]}
+                onPress={() => setPremiumLockModalVisible(false)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.infoCtaText, { color: dark ? '#e6edf3' : '#0f172a' }]}>{t('actions.cancel') || 'Vazgeç'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.infoCta, { backgroundColor: '#2563eb', flex: 1 }]}
+                onPress={() => {
+                  setPremiumLockModalVisible(false);
+                  navigation.navigate('Paywall');
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.infoCtaText}>{t('settings.unlockFeatures') || 'Premium\'a Geç'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </View>  
   );

@@ -215,8 +215,9 @@ export default function CreateQrScreen() {
   const qrService = useMemo(() => new QrGenerationService(), []);
 
   // --- Ad Logic (Hook) ---
-  const rewardedEnabled = Platform.OS !== 'ios';
-  const { showAd } = useAdManager(rewardedEnabled);
+  const rewardedEnabled = false; 
+  // const { showAd } = useAdManager(rewardedEnabled);
+  const showAd = async () => ({ ok: false, error: 'disabled' }); // Dummy implementation since ads are disabled
 
 
   // --- Derived State & Logic ---
@@ -245,19 +246,21 @@ export default function CreateQrScreen() {
   }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
 
   const gateDesc = useMemo(() => {
-    if (Platform.OS === 'ios') {
-      if (unlockState.pendingTemplateKey) {
-        const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
-        const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
-        return t('template_unlock_desc_premium', { template: label }) || 'Bu özellik Premium ile açılır.';
-      }
-      if (unlockState.pendingQrType) return t('qr_type_unlock_desc_premium') || 'Bu QR tipini kullanmak için Premium olun.';
-      if (unlockState.pendingCustomMode === 'barcode_generate') {
-        return t('barcode_unlock_desc_premium') || 'Barkod oluşturmak için Premium olun.';
-      }
-      if (unlockState.pendingCustomMode) return t('custom_qr_unlock_desc_premium') || 'Bu stil Premium ile açılır.';
-      return t('premium_unlock_desc') || 'Premium ile tüm kilitler açılır.';
+    // if (Platform.OS === 'ios') {
+    if (unlockState.pendingTemplateKey) {
+      const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
+      const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
+      return t('template_unlock_desc_premium', { template: label }) || 'Bu özellik Premium ile açılır.';
     }
+    if (unlockState.pendingQrType) return t('qr_type_unlock_desc_premium') || 'Bu QR tipini kullanmak için Premium olun.';
+    if (unlockState.pendingCustomMode === 'barcode_generate') {
+      return t('barcode_unlock_desc_premium') || 'Barkod oluşturmak için Premium olun.';
+    }
+    if (unlockState.pendingCustomMode) return t('custom_qr_unlock_desc_premium') || 'Bu stil Premium ile açılır.';
+    return t('premium_unlock_desc') || 'Premium ile tüm kilitler açılır.';
+    // }
+
+    /*
     if (unlockState.pendingTemplateKey) {
       const tpl = QUICK_LINK_TEMPLATES.find((tplItem) => tplItem.key === unlockState.pendingTemplateKey);
       const label = tpl ? (t(tpl.labelKey) || tpl.fallbackLabel) : '';
@@ -268,6 +271,7 @@ export default function CreateQrScreen() {
       return t('barcode_unlock_desc') || 'Barkod oluşturmak için Premium olun ya da ödüllü reklam izleyin.';
     }
     return t('custom_qr_unlock_desc') || 'Logo ve çerçeve eklemek için Premium olun ya da ödüllü reklam izleyin.';
+    */
   }, [unlockState.pendingTemplateKey, unlockState.pendingQrType, unlockState.pendingCustomMode, t]);
 
   const premiumBenefits = useMemo(() => {
@@ -469,13 +473,15 @@ export default function CreateQrScreen() {
         if (isNumericOnlyBarcodeFormat) {
           value = text.replace(/[^0-9]/g, '');
         } else if (fmt === 'CODE39') {
-          value = text.toUpperCase().replace(/[^0-9A-Z\-\.\ \$\/\+\%]/g, '');
+          value = text.replace(/[^0-9A-Za-z\-\.\ \$\/\+\%şŞıİğĞüÜöÖçÇ]/g, '');
         } else if (fmt === 'codabar') {
-          value = text.toUpperCase().replace(/[^0-9\-\$\:\.\/\+ABCD]/g, '');
+          // Allow all letters temporarily to prevent typing glitches, validation will catch invalid ones
+          value = text.replace(/[^0-9A-Za-z\-\$\:\.\/\+şŞıİğĞüÜöÖçÇ]/g, '');
         } else if (fmt === 'CODE128A') {
-          value = text.toUpperCase().replace(/[^\x20-\x5F]/g, '');
+          // Allow lowercase temporarily, will be uppercased on generate
+          value = text.replace(/[^a-z\x20-\x5FşŞıİğĞüÜöÖçÇ]/g, '');
         } else if (fmt === 'CODE128' || fmt === 'CODE128B') {
-          value = text.replace(/[^\x20-\x7E]/g, '');
+          value = text.replace(/[^\x20-\x7EşŞıİğĞüÜöÖçÇ]/g, '');
         }
       }
       updateUi({ input: value });
@@ -969,7 +975,19 @@ export default function CreateQrScreen() {
     const type = qrSettings.type;
 
     if ((type === 'url' || type === 'text') && qrSettings.symbolType === 'barcode') {
-      const raw = (uiState.input || '').trim();
+      let raw = (uiState.input || '').trim();
+
+      // Normalize Turkish characters to ASCII
+      const trMap = {
+        'ş': 's', 'Ş': 'S', 'ı': 'i', 'İ': 'I', 'ğ': 'g', 'Ğ': 'G',
+        'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
+      };
+      raw = raw.split('').map(c => trMap[c] || c).join('');
+
+      if (['CODE39', 'codabar', 'CODE128A'].includes(qrSettings.barcodeFormat)) {
+        raw = raw.toUpperCase();
+      }
+
       if (__DEV__) {
         console.log('[CreateQrScreen] barcode validation start', {
           raw,
@@ -1820,7 +1838,7 @@ export default function CreateQrScreen() {
                   placeholderTextColor={dark ? '#8b98a5' : '#7a8699'}
                   value={uiState.input}
                   onChangeText={handleInputChange}
-                  autoCapitalize="none"
+                  autoCapitalize={(qrSettings.symbolType === 'barcode' && ['CODE39', 'codabar', 'CODE128A'].includes(qrSettings.barcodeFormat)) ? 'characters' : 'none'}
                   autoCorrect={false}
                   multiline
                   numberOfLines={1}

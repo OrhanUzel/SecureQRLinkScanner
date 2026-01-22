@@ -27,7 +27,11 @@ const HistoryItem = React.memo(({
   onCopy, 
   onShareWifi, 
   onCopyWifi, 
-  onGoogleSearch 
+  onGoogleSearch,
+  onToggleFavorite,
+  onCall,
+  onSms,
+  onEmail
 }) => {
   const getLevelInfo = (level) => {
     if (level === 'secure') return { text: t('result.secure'), color: '#2f9e44', icon: 'shield-checkmark' };
@@ -55,9 +59,10 @@ const HistoryItem = React.memo(({
   const len = cleanContent.length;
   const isBarcode = !isWifi && ((item.type && ['ean13', 'ean8', 'upc_a', 'code39', 'code128'].includes(item.type.toLowerCase())) ||
                     (isNumeric && (len === 8 || len === 12 || len === 13)));
-  const isSms = !isWifi && (contentType === 'sms' || upperContent.startsWith('SMSTO:'));
+  const isSms = !isWifi && (contentType === 'sms' || upperContent.startsWith('SMSTO:') || upperContent.startsWith('SMS:'));
   const isEmail = !isWifi && (contentType === 'email' || cleanContent.startsWith('mailto:') || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanContent));
-  const isTel = !isWifi && (contentType === 'tel'  );
+  const isTel = !isWifi && (contentType === 'tel' || cleanContent.startsWith('tel:') || /^\+?[\d\s\-\(\)]{7,}$/.test(cleanContent));
+  const isOther = !isWifi && !isUrl && !isBarcode && !isSms && !isEmail && !isTel && !!cleanContent;
 
   let country = item.country;
   if (!country && isBarcode) {
@@ -73,6 +78,14 @@ const HistoryItem = React.memo(({
         >
           {isWifi ? wifiTitle : item.content}
         </Text>
+        <TouchableOpacity
+          onPress={() => onToggleFavorite(index)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={[styles.deleteBtn, { backgroundColor: dark ? '#2b323f' : '#f4f6f8', marginRight: 6 }]}
+          activeOpacity={0.7}
+        >
+          <Ionicons name={item.favorite ? "heart" : "heart-outline"} size={18} color={item.favorite ? "#e11d48" : (dark ? '#9ecaff' : '#5c6a7a')} />
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={() => onDelete(index)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -204,7 +217,87 @@ const HistoryItem = React.memo(({
  
         </View>
       )}
+      {isTel && (
+        <View style={styles.buttonRow}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.openButton, { backgroundColor: dark ? '#6c5ce7' : '#6c5ce7' }]}
+            onPress={() => onCall(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="call" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.call') || 'Ara'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.copyButton, { backgroundColor: dark ? '#2f9e44' : '#2f9e44' }]}
+            onPress={() => onCopy(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="copy" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.copy')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {isSms && (
+         <View style={styles.buttonRow}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.openButton, { backgroundColor: dark ? '#6c5ce7' : '#6c5ce7' }]}
+            onPress={() => onSms(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chatbubble" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.sendSms') || 'SMS Gönder'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.copyButton, { backgroundColor: dark ? '#2f9e44' : '#2f9e44' }]}
+            onPress={() => onCopy(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="copy" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.copy')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {isEmail && (
+         <View style={styles.buttonRow}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.openButton, { backgroundColor: dark ? '#6c5ce7' : '#6c5ce7' }]}
+            onPress={() => onEmail(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="mail" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.sendEmail') || 'E-posta Gönder'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.copyButton, { backgroundColor: dark ? '#2f9e44' : '#2f9e44' }]}
+            onPress={() => onCopy(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="copy" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.copy')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {isBarcode && (
+        <View style={styles.buttonRow}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.googleButton]}
+            onPress={() => onGoogleSearch(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-google" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.searchGoogle') || 'Google\'da Ara'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.copyButton, { backgroundColor: dark ? '#2f9e44' : '#2f9e44' }]}
+            onPress={() => onCopy(item.content)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="copy" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>{t('actions.copy')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {isOther && (
         <View style={styles.buttonRow}>
           <TouchableOpacity 
             style={[styles.actionButton, styles.googleButton]}
@@ -236,7 +329,7 @@ const HistoryItem = React.memo(({
 // Memoized Header Component
 const HistoryListHeader = React.memo(() => (
   <View style={{ marginBottom: 8 }}>
-     <AdvancedAdCard placement="history_top" />
+     {/* {Platform.OS !== 'ios' && <AdvancedAdCard placement="history_top" />} */}
   </View>
 ));
 
@@ -250,6 +343,9 @@ export default function HistoryScreen() {
   const [clearModalVisible, setClearModalVisible] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [premium, setPremium] = useState(false);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const ALWAYS_CONFIRM_LINK_KEY = 'always_confirm_link';
@@ -274,12 +370,34 @@ export default function HistoryScreen() {
     }
   }, [items]);
 
+  const toggleFavorite = useCallback(async (index) => {
+    if (!premium) {
+      setPremiumModalVisible(true);
+      return;
+    }
+
+    try {
+      const updated = [...items];
+      // Create a new object for the updated item to ensure immutability
+      updated[index] = { ...updated[index], favorite: !updated[index].favorite };
+      setItems(updated);
+      await AsyncStorage.setItem('scan_history', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+      Alert.alert('Hata', 'Favori durumu güncellenemedi.');
+    }
+  }, [items, premium, t, navigation]);
+
   const load = useCallback(async () => {
     try {
       // Don't set loading(true) here to avoid flash on re-focus
       // If it's the very first load, 'loading' is already true from useState
-      const raw = await AsyncStorage.getItem('scan_history');
+      const [raw, premiumFlag] = await Promise.all([
+        AsyncStorage.getItem('scan_history'),
+        AsyncStorage.getItem('premium')
+      ]);
       setItems(raw ? JSON.parse(raw) : []);
+      setPremium(premiumFlag === 'true');
     } catch (err) {
       console.error('Failed to load history:', err);
       setItems([]);
@@ -311,26 +429,55 @@ export default function HistoryScreen() {
     }, [load])
   );
 
+  const filteredItems = useMemo(() => {
+    if (showFavorites) {
+      return items.filter(item => item.favorite);
+    }
+    return items;
+  }, [items, showFavorites]);
+
   // Set header right button
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity 
-          style={Platform.OS === 'ios' ? styles.clearBtnIOS : styles.clearBtn} 
-          onPress={confirmClearAll}
-          activeOpacity={0.7}
-        >
-          <Ionicons 
-            name="trash-outline" 
-            size={Platform.OS === 'ios' ? 22 : 16} 
-            color={Platform.OS === 'ios' ? '#d00000' : '#fff'} 
-            style={{ marginRight: 6 }} 
-          />
-          <Text style={Platform.OS === 'ios' ? styles.clearTextIOS : styles.clearText}>{t('history.clear')}</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity 
+            style={{ 
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingVertical: 8, 
+              paddingHorizontal: 12, 
+              borderRadius: 8, 
+              borderWidth: 1,
+              backgroundColor: showFavorites ? (dark ? 'rgba(225, 29, 72, 0.15)' : '#fff1f2') : 'transparent', 
+              borderColor: showFavorites ? (dark ? '#e11d48' : '#fda4af') : (dark ? '#2b323f' : '#d1d5db')
+            }} 
+            onPress={() => setShowFavorites(prev => !prev)}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name={showFavorites ? "heart" : "heart-outline"} 
+              size={20} 
+              color={showFavorites ? '#e11d48' : (dark ? '#9ecaff' : '#64748b')} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.clearBtn} 
+            onPress={confirmClearAll}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name="trash-outline" 
+              size={16} 
+              color="#fff" 
+              style={{ marginRight: 6 }} 
+            />
+            <Text style={styles.clearText}>{t('history.clear')}</Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation, t, confirmClearAll]);
+  }, [navigation, t, confirmClearAll, showFavorites, dark]);
 
   const handleCopy = useCallback(async (content) => {
     try {
@@ -383,6 +530,38 @@ export default function HistoryScreen() {
     }
   }, []);
 
+  const handleCall = useCallback(async (content) => {
+    const phoneNumber = content.replace(/^tel:/i, '');
+    const url = `tel:${phoneNumber}`;
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Hata', 'Arama yapılamadı: ' + e.message);
+    }
+  }, []);
+
+  const handleSms = useCallback(async (content) => {
+    // Basic SMS parsing: remove 'smsto:' or 'sms:' prefix
+    // If format is smsto:number:body, this simple replace might need more logic but works for basic cases
+    const phoneNumber = content.replace(/^smsto:/i, '').replace(/^sms:/i, '').split(':')[0];
+    const url = `sms:${phoneNumber}`;
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Hata', 'SMS açılamadı: ' + e.message);
+    }
+  }, []);
+
+  const handleEmail = useCallback(async (content) => {
+    const email = content.replace(/^mailto:/i, '');
+    const url = `mailto:${email}`;
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Hata', 'Email açılamadı: ' + e.message);
+    }
+  }, []);
+
   const renderItem = useCallback(({ item, index }) => (
     <HistoryItem 
       item={item} 
@@ -395,8 +574,12 @@ export default function HistoryScreen() {
       onShareWifi={handleShareWifi}
       onCopyWifi={handleCopyWifi}
       onGoogleSearch={handleGoogleSearch}
+      onToggleFavorite={toggleFavorite}
+      onCall={handleCall}
+      onSms={handleSms}
+      onEmail={handleEmail}
     />
-  ), [dark, t, deleteItem, handleOpenLink, handleCopy, handleShareWifi, handleCopyWifi, handleGoogleSearch]);
+  ), [dark, t, deleteItem, handleOpenLink, handleCopy, handleShareWifi, handleCopyWifi, handleGoogleSearch, toggleFavorite, handleCall, handleSms, handleEmail]);
 
   const keyExtractor = useCallback((item, index) => {
     // Use content and timestamp as key if available, otherwise fallback to index
@@ -413,7 +596,7 @@ export default function HistoryScreen() {
       ) : (
       <FlatList
         style={{}}
-        data={items}
+        data={filteredItems}
         keyExtractor={keyExtractor}
         contentContainerStyle={[
           styles.listContent,
@@ -424,21 +607,23 @@ export default function HistoryScreen() {
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconWrap, { backgroundColor: dark ? '#1b2330' : '#e5e9f0' }]}>
-              <Ionicons name="time-outline" size={64} color={dark ? '#3b4654' : '#8b98a5'} />
+              <Ionicons name={showFavorites ? "heart-dislike-outline" : "time-outline"} size={64} color={dark ? '#3b4654' : '#8b98a5'} />
             </View>
             <Text style={[styles.emptyTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>
-              {t('history.empty.title')}
+              {showFavorites ? (t('history.empty.favoritesTitle') || 'Favori Bulunamadı') : t('history.empty.title')}
             </Text>
             <Text style={[styles.emptyDesc, { color: dark ? '#8b98a5' : '#5c6a7a' }]}>
-              {t('history.empty.desc')}
+              {showFavorites ? (t('history.empty.favoritesDesc') || 'Henüz favorilere eklenmiş bir öğe yok.') : t('history.empty.desc')}
             </Text>
-            <TouchableOpacity 
-              style={[styles.emptyButton, { backgroundColor: dark ? '#0969da' : '#0969da' }]}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Ionicons name="scan-outline" size={20} color="#fff" />
-              <Text style={styles.emptyButtonText}>{t('actions.scan')}</Text>
-            </TouchableOpacity>
+            {!showFavorites && (
+              <TouchableOpacity 
+                style={[styles.emptyButton, { backgroundColor: dark ? '#0969da' : '#0969da' }]}
+                onPress={() => navigation.navigate('Home')}
+              >
+                <Ionicons name="scan-outline" size={20} color="#fff" />
+                <Text style={styles.emptyButtonText}>{t('actions.scan')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         renderItem={renderItem}
@@ -501,6 +686,46 @@ export default function HistoryScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.modalBtnText}>{t('actions.delete')}</Text>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </View>
+      </Modal>
+
+      <Modal visible={premiumModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <BlurView
+            intensity={60}
+            tint={dark ? 'dark' : 'light'}
+            style={[
+              styles.modalCard,
+              { backgroundColor: dark ? 'rgba(22,27,34,0.85)' : 'rgba(255,255,255,0.9)', borderColor: dark ? '#30363d' : '#e1e4e8' }
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Ionicons name="star" size={22} color={dark ? '#fbbf24' : '#f59e0b'} />
+              <Text style={[styles.modalTitle, { color: dark ? '#e6edf3' : '#0b1220' }]}>{t('premium.requiredTitle') || 'Premium Özellik'}</Text>
+            </View>
+            <Text style={[styles.modalMessage, { color: dark ? '#8b98a5' : '#3b4654' }]}>
+              {t('premium.requiredMessage') || 'Favorilere ekleme özelliği sadece Premium üyeler içindir. Kilidi açmak ister misiniz?'}
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtnOutline, { borderColor: dark ? '#8b98a5' : '#7a8699' }]}
+                onPress={() => setPremiumModalVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalBtnOutlineText, { color: dark ? '#c9d1d9' : '#24292f' }]}>{t('actions.cancel') || 'Vazgeç'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#2563eb' }]}
+                onPress={() => {
+                  setPremiumModalVisible(false);
+                  navigation.navigate('Paywall');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnText}>{t('actions.goPremium') || "Premium'a Geç"}</Text>
               </TouchableOpacity>
             </View>
           </BlurView>

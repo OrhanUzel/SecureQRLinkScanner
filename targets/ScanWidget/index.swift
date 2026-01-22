@@ -6,22 +6,12 @@ import AppIntents
 struct ScanControlWidget: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "ScanControlWidget") {
-            ControlWidgetButton(action: LaunchAppIntent()) {
+            ControlWidgetButton(action: OpenURLIntent(URL(string: "secureqrlinkscanner://scan")!)) {
                 Label("Secure Scan", systemImage: "qrcode.viewfinder")
             }
         }
         .displayName("Secure Scan")
         .description("Quickly scan a QR code.")
-    }
-}
-
-@available(iOS 18.0, *)
-struct LaunchAppIntent: AppIntent {
-    static var title: LocalizedStringResource = "Secure Scan"
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        return .result()
     }
 }
 
