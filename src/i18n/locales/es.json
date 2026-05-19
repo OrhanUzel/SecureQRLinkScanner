@@ -264,6 +264,8 @@
   "paywall.restoreEmptyMessage": "No se encontró ninguna suscripción activa para restaurar.",
   "paywall.paymentPendingError": "Tu pago está pendiente. Por favor revisa tu cuenta de la tienda.",
   "paywall.premiumAccess": "Acceso Premium",
+  "paywall.purchaseError": "Se produjo un error durante la compra.",
+  "paywall.configurationError": "Error de configuración (Error 23). Por favor intente más tarde o contacte soporte.",
   "paywall.restoreError": "Ocurrió un problema durante la restauración.",
   "settings.premiumTitle": "Premium",
   "settings.premiumDesc": "Pasa a una experiencia sin anuncios más rápida y limpia.",

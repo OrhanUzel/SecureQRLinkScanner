@@ -203,6 +203,8 @@
   "camera.permission.openSettings": "Open Settings",
   "scan.footer.text": "All scans are processed on your device; no data is shared.",
   "paywall.premiumAccess": "Premium Access",
+  "paywall.purchaseError": "An error occurred during purchase.",
+  "paywall.configurationError": "Configuration error (Error 23). Please try again later or contact support.",
   "paywall.restoreError": "A problem occurred during restoration.",
   "alerts.errorTitle": "Error",
   "download_unavailable": "Download not available",

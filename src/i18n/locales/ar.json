@@ -276,6 +276,8 @@
   "paywall.restoreEmptyMessage": "لم يتم العثور على اشتراك نشط للاستعادة.",
   "paywall.paymentPendingError": "عملية الدفع قيد الانتظار حالياً. يرجى التحقق من حساب المتجر الخاص بك.",
   "paywall.premiumAccess": "الوصول المميز",
+  "paywall.purchaseError": "حدث خطأ أثناء عملية الشراء.",
+  "paywall.configurationError": "خطأ في التكوين (Error 23). يرجى المحاولة لاحقاً أو الاتصال بالدعم.",
   "paywall.restoreError": "حدثت مشكلة أثناء الاستعادة.",
   "alerts.errorTitle": "خطأ",
   "label.wifi": "واي‑فاي",

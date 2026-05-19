@@ -65,7 +65,7 @@ module.exports = {
       }
     },
     ios: {
-      buildNumber: "6",
+      buildNumber: "7",
       supportsTablet: true,
       bundleIdentifier: "com.orhanuzel.secureqrlinkscanner",
       "appleTeamId": process.env.APPLE_TEAM_ID,

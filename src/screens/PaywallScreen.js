@@ -92,6 +92,26 @@ export default function PaywallScreen() {
           });
         }}
 
+        onPurchaseError={(error) => {
+          // User cancelled shouldn't trigger an error popup usually
+          if (error.userCancelled) return;
+          
+          let message = t('paywall.purchaseError');
+          const errStr = error.message || '';
+          
+          // Specific check for Error 23 (Configuration Error)
+          if (errStr.includes('Error 23') || errStr.includes('ConfigurationError') || (error.code && Number(error.code) === 23)) {
+             message = t('paywall.configurationError');
+          }
+          
+          setStatusModal({
+            visible: true,
+            title: t('alerts.errorTitle'),
+            message: message,
+            type: 'error'
+          });
+        }}
+
         // 3. Geri Yükleme (Restore) işlemi tamamlandığında:
         onRestoreCompleted={async (customerInfo) => {
           const hasActive = Object.keys(customerInfo?.entitlements?.active || {}).length > 0;
